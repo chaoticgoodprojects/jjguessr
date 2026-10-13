@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { TEAMS, type TeamId } from "../rules";
 import type { ClientMessage, PlayerView, RoomView } from "../shared/protocol";
 import { Finished } from "./Finished";
@@ -29,7 +29,7 @@ export function Room({ code, onHome }: { code: string; onHome: () => void }) {
       {!view ? (
         <p className="meta">Connecting…</p>
       ) : view.phase === "lobby" ? (
-        <Lobby view={view} send={send} />
+        <Lobby view={view} send={send} error={error} />
       ) : view.phase === "playing" && view.turn ? (
         <TurnScreen view={view} send={send} />
       ) : (
@@ -74,7 +74,7 @@ function TopBar({ code, connection }: { code: string; connection: string }) {
   );
 }
 
-function Lobby({ view, send }: { view: RoomView; send: (m: ClientMessage) => void }) {
+function Lobby({ view, send, error }: { view: RoomView; send: (m: ClientMessage) => void; error: string | null }) {
   const host = [...view.teams.green, ...view.teams.black].find((p) => p.id === view.hostId);
   return (
     <>
@@ -88,13 +88,15 @@ function Lobby({ view, send }: { view: RoomView; send: (m: ClientMessage) => voi
         <JoinForm send={send} />
       )}
 
+      <Songs view={view} send={send} error={error} />
+
       <section className="panel stack">
         {view.isHost ? (
           <>
             <button className="button primary" disabled={view.startBlocker !== null} onClick={() => send({ type: "start" })}>
               Start the game
             </button>
-            <p className="meta">{view.startBlocker ?? `${view.songCount} songs ready from the sample list.`}</p>
+            {view.startBlocker && <p className="meta">{view.startBlocker}</p>}
           </>
         ) : (
           <>
@@ -181,5 +183,83 @@ function PlayerRow({ player, view }: { player: PlayerView; view: RoomView }) {
       {player.id === view.hostId && <span className="chip">Host</span>}
       {!player.connected && <span className="chip dashed">Away</span>}
     </li>
+  );
+}
+
+/** The host picks a song pack or pastes a public Spotify playlist; everyone else sees the choice. */
+function Songs({ view, send, error }: { view: RoomView; send: (m: ClientMessage) => void; error: string | null }) {
+  const [link, setLink] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { source } = view;
+
+  // A new source or an error means the playlist request finished; give up waiting after 20 seconds regardless.
+  const sourceKey = JSON.stringify(source);
+  useEffect(() => setLoading(false), [sourceKey, error]);
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => setLoading(false), 20_000);
+    return () => clearTimeout(t);
+  }, [loading]);
+
+  const summary = `${source.name} · ${view.songCount} songs`;
+  if (!view.isHost) {
+    return (
+      <section className="panel stack">
+        <span className="label">Songs</span>
+        <p>{summary}</p>
+      </section>
+    );
+  }
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!link.trim()) return;
+    setLoading(true);
+    send({ type: "usePlaylist", link });
+  };
+
+  return (
+    <section className="panel stack" aria-label="Songs">
+      <h2>Songs</h2>
+      <div className="folder-tabs" role="radiogroup" aria-label="Song packs">
+        {view.packs.map((p) => {
+          const selected = source.kind === "pack" && source.id === p.id;
+          return (
+            <button
+              key={p.id}
+              role="radio"
+              aria-checked={selected}
+              className={`tab small ${selected ? "selected" : ""}`}
+              onClick={() => send({ type: "usePack", packId: p.id })}
+            >
+              {p.name}
+            </button>
+          );
+        })}
+      </div>
+      <form className="stack" onSubmit={submit}>
+        <label className="label" htmlFor="playlist">
+          Or paste a public Spotify playlist link
+        </label>
+        <div className="row">
+          <input
+            id="playlist"
+            className="input small-input"
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            placeholder="https://open.spotify.com/playlist/…"
+            autoComplete="off"
+            inputMode="url"
+          />
+          <button className="button" type="submit" disabled={!link.trim() || loading}>
+            {loading ? "Reading…" : "Use playlist"}
+          </button>
+        </div>
+      </form>
+      <p className="meta" data-testid="song-source">
+        Using {summary}
+      </p>
+      {source.kind === "playlist" && <p className="meta">Playlists don't list albums, so only the artist can be revealed.</p>}
+    </section>
   );
 }

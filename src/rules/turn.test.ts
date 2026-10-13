@@ -202,3 +202,13 @@ describe("void", () => {
     expect(T.voidTurn(running(), at(50)).result).toEqual({ reason: "voided", points: 0, at: 50 });
   });
 });
+
+describe("songs without an album", () => {
+  const NO_ALBUM: Song = { id: "s3", title: "Mystery Song", artist: "Someone", album: null };
+
+  it("still allows revealing the artist, but not the album", () => {
+    const t = T.startClock(T.pickSong(ready([NO_ALBUM]), NO_ALBUM.id), T0);
+    expect(code(() => T.reveal(t, "album", at(1)))).toBe("no-album");
+    expect(T.reveal(t, "artist", at(1)).reveal).toMatchObject({ kind: "artist", value: "Someone" });
+  });
+});

@@ -31,9 +31,19 @@ const MAX_NAME = 24;
 export const TOTAL_TURNS = RULES.rounds * TEAMS.length;
 
 export function createGame(hostId: string, songs: Song[]): Game {
+  return { hostId, players: [], pool: uniqueSongs(songs), phase: "lobby", turnNumber: 0, turn: null, history: [] };
+}
+
+/** The host swaps the song list while still in the lobby. */
+export function setSongs(game: Game, byPlayerId: string, songs: Song[]): Game {
+  assertHost(game, byPlayerId);
+  if (game.phase !== "lobby") throw new RuleError("game-already-started", "The songs are locked once the game starts.");
+  return { ...game, pool: uniqueSongs(songs) };
+}
+
+function uniqueSongs(songs: Song[]): Song[] {
   const seen = new Set<string>();
-  const pool = songs.filter((s) => !seen.has(s.id) && seen.add(s.id));
-  return { hostId, players: [], pool, phase: "lobby", turnNumber: 0, turn: null, history: [] };
+  return songs.filter((s) => !seen.has(s.id) && seen.add(s.id));
 }
 
 /** Joining, or changing name or team while still in the lobby. Late joiners join the rotation. */

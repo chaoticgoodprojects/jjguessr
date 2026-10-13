@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseClientMessage } from "../shared/protocol";
-import { createRoom, handle, nextAlarm, ROOM_TTL_MS, seat, syncPresence, viewFor } from "./room";
-import { SAMPLE_SONGS } from "./sample-songs";
+import { PACKS } from "./packs";
+import { createRoom, handle, nextAlarm, ROOM_TTL_MS, seat, syncPresence, viewFor, type SyncMessage } from "./room";
 
 const NOW = 1_000_000;
 const ids = () => {
@@ -11,14 +11,14 @@ const ids = () => {
 
 function setup() {
   const newId = ids();
-  let room = createRoom("KPRT", "host-token-0000000", SAMPLE_SONGS, NOW, newId);
+  let room = createRoom("KPRT", "host-token-0000000", NOW, newId);
   const seatOf = (token: string) => {
     const s = seat(room, token, newId);
     room = s.room;
     return s.playerId;
   };
   const act = (playerId: string, raw: object, at = NOW + 1) => {
-    const r = handle(room, playerId, parseClientMessage(JSON.stringify(raw))!, at, () => 0);
+    const r = handle(room, playerId, parseClientMessage(JSON.stringify(raw)) as SyncMessage, at, () => 0);
     if (r.ok) room = r.room;
     return r;
   };
@@ -84,7 +84,7 @@ describe("what each player sees", () => {
     expect(view.isHost).toBe(false);
     expect(view.teams.green).toEqual([{ id: host, name: "Ann", team: "green", connected: false }]);
     expect(view.startBlocker).toBe("Each team needs at least 2 players.");
-    expect(JSON.stringify(view)).not.toContain(SAMPLE_SONGS[0]!.title);
+    for (const song of PACKS[0]!.songs) expect(JSON.stringify(view)).not.toContain(song.title);
   });
 
   it("shows nobody as joined before they put a name down", () => {
@@ -169,5 +169,30 @@ describe("parseClientMessage", () => {
     expect(parseClientMessage(JSON.stringify({ type: "reveal", kind: "lyrics" }))).toBeNull();
     expect(parseClientMessage(JSON.stringify({ type: "count", guessIndex: 1.5 }))).toBeNull();
     expect(parseClientMessage(JSON.stringify({ type: "guess", text: "hello" }))).toEqual({ type: "guess", text: "hello" });
+  });
+});
+
+describe("song sources", () => {
+  it("starts on the all-time pack and lets the host switch packs in the lobby", () => {
+    const { seatOf, act, room } = setup();
+    const host = seatOf("host-token-0000000");
+    const b = seatOf("b-token-0000000000");
+    expect(room().source).toEqual({ kind: "pack", id: "all-time", name: "All-time greats" });
+
+    expect(act(host, { type: "usePack", packId: "90s" }).ok).toBe(true);
+    expect(viewFor(room(), b, new Set(), NOW)).toMatchObject({
+      source: { kind: "pack", id: "90s", name: "90s" },
+      songCount: PACKS.find((p) => p.id === "90s")!.songs.length,
+    });
+    expect(act(b, { type: "usePack", packId: "80s" })).toMatchObject({ ok: false, message: "Only the host can do that." });
+    expect(act(host, { type: "usePack", packId: "polka" })).toMatchObject({ ok: false });
+  });
+});
+
+describe("song packs", () => {
+  it.each(PACKS.map((p) => [p.name, p] as const))("%s has enough distinct songs for a game", (_, pack) => {
+    expect(pack.songs.length).toBeGreaterThanOrEqual(20);
+    const titles = new Set(pack.songs.map((s) => `${s.title}|${s.artist}`));
+    expect(titles.size).toBe(pack.songs.length);
   });
 });

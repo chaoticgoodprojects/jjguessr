@@ -128,6 +128,7 @@ export function reveal(turn: Turn, kind: RevealKind, now: number): Turn {
   }
   const song = pickedSong(t);
   const value = kind === "artist" ? song.artist : song.album;
+  if (value === null) throw new RuleError("no-album", "This playlist doesn't say which album the song is on, so only the artist can be revealed.");
   const r = { seq: t.seq, kind, value, at: elapsed(t, now) };
   return endIfNoPoints({ ...t, seq: t.seq + 1, reveal: r }, now);
 }

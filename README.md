@@ -27,6 +27,8 @@ No singing, humming, playing or reciting the song, no naming the artist or album
 - `src/server/` is the game server on Cloudflare Workers. Each game is one Durable Object that keeps the game state and every player's live connection, and sends each player only what they're allowed to see.
 - `src/web/` is the React app players open on their phones.
 - `src/shared/` is the message format between the two.
+- `src/server/packs.ts` holds the built-in song packs; edit them freely (each needs at least 20 songs).
+- `src/server/spotify.ts` reads public Spotify playlists from Spotify's embed page. It's unofficial and can break if Spotify changes that page; the packs are the fallback.
 
 ```sh
 npm install

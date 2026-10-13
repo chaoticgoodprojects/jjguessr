@@ -130,3 +130,7 @@ p { margin: 0; }
 .hints .chip { margin-left: 8px; }
 .button.armed { background: var(--ink); color: var(--stock); }
 .grow { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+
+.folder-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.tab.small { padding: 7px 11px; font-size: 11px; }
+.small-input { font-size: 16px; }

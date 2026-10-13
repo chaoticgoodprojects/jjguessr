@@ -45,3 +45,17 @@ describe("isSelfTitled", () => {
     expect(isSelfTitled("Queen", "Jazz")).toBe(false);
   });
 });
+
+describe("bracketed titles", () => {
+  it("accepts the title with or without the bracketed part", () => {
+    expect(titleMatches("satisfaction", "(I Can't Get No) Satisfaction")).toBe(true);
+    expect(titleMatches("i cant get no satisfaction", "(I Can't Get No) Satisfaction")).toBe(true);
+    expect(titleMatches("single ladies", "Single Ladies (Put a Ring on It)")).toBe(true);
+    expect(titleMatches("single ladies put a ring on it", "Single Ladies (Put a Ring on It)")).toBe(true);
+    expect(titleMatches("uptown funk", "Uptown Funk (feat. Bruno Mars)")).toBe(true);
+  });
+
+  it("treats an unknown album as not self-titled", () => {
+    expect(isSelfTitled("Weezer", null)).toBe(false);
+  });
+});

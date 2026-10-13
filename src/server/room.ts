@@ -23,11 +23,13 @@ import {
   type TeamId,
   type Turn,
 } from "../rules";
-import type { ClientMessage, PlayerView, Role, RoomView, TurnSummary, TurnView } from "../shared/protocol";
+import type { ClientMessage, PlayerView, Role, RoomView, SongSource, TurnSummary, TurnView } from "../shared/protocol";
+import { DEFAULT_PACK_ID, PACKS, findPack } from "./packs";
 
 export interface RoomData {
   code: string;
   game: Game;
+  source: SongSource;
   /** Secret token → public player id. */
   seats: Record<string, string>;
   createdAt: number;
@@ -39,11 +41,13 @@ export type IdGen = () => string;
 /** Rooms are cleared out a day after the last move. */
 export const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
 
-export function createRoom(code: string, hostToken: string, songs: Song[], now: number, newId: IdGen): RoomData {
+export function createRoom(code: string, hostToken: string, now: number, newId: IdGen): RoomData {
   const hostId = newId();
+  const pack = findPack(DEFAULT_PACK_ID)!;
   return {
     code,
-    game: G.createGame(hostId, songs),
+    game: G.createGame(hostId, pack.songs),
+    source: { kind: "pack", id: pack.id, name: pack.name },
     seats: { [hostToken]: hostId },
     createdAt: now,
     lastActiveAt: now,
@@ -60,17 +64,40 @@ export function seat(room: RoomData, token: string, newId: IdGen): { room: RoomD
 
 export type HandleResult = { ok: true; room: RoomData } | { ok: false; message: string };
 
-export function handle(room: RoomData, playerId: string, msg: ClientMessage, now: number, rng: Rng = Math.random): HandleResult {
-  try {
+/** A move that needs a fetch first (reading a pasted playlist) is handled by `useSongs` instead. */
+export type SyncMessage = Exclude<ClientMessage, { type: "usePlaylist" }>;
+
+export function handle(room: RoomData, playerId: string, msg: SyncMessage, now: number, rng: Rng = Math.random): HandleResult {
+  return attempt(() => {
+    if (msg.type === "usePack") {
+      const pack = findPack(msg.packId);
+      if (!pack) throw new RuleError("not-a-choice", "That song pack doesn't exist.");
+      return useSongs(room, playerId, pack.songs, { kind: "pack", id: pack.id, name: pack.name }, now);
+    }
     const game = apply(G.tick(room.game, now), playerId, msg, now, rng);
-    return { ok: true, room: { ...room, game, lastActiveAt: now } };
+    return { ...room, game, lastActiveAt: now };
+  });
+}
+
+/** Whether this player may change the songs right now, checked before fetching a playlist. */
+export function canChangeSongs(room: RoomData, playerId: string): HandleResult {
+  return attempt(() => ({ ...room, game: G.setSongs(room.game, playerId, room.game.pool) }));
+}
+
+export function useSongs(room: RoomData, playerId: string, songs: Song[], source: SongSource, now: number): RoomData {
+  return { ...room, game: G.setSongs(room.game, playerId, songs), source, lastActiveAt: now };
+}
+
+export function attempt(fn: () => RoomData): HandleResult {
+  try {
+    return { ok: true, room: fn() };
   } catch (e) {
     if (e instanceof RuleError) return { ok: false, message: e.message };
     throw e;
   }
 }
 
-function apply(game: Game, playerId: string, msg: ClientMessage, now: number, rng: Rng): Game {
+function apply(game: Game, playerId: string, msg: Exclude<SyncMessage, { type: "usePack" }>, now: number, rng: Rng): Game {
   switch (msg.type) {
     case "join":
       return G.join(game, { id: playerId, name: msg.name, team: msg.team });
@@ -142,6 +169,8 @@ export function viewFor(room: RoomData, playerId: string, online: ReadonlySet<st
     teams,
     startBlocker: check.ok ? null : check.message,
     songCount: game.pool.length,
+    source: room.source,
+    packs: PACKS.map((p) => ({ id: p.id, name: p.name, count: p.songs.length })),
     turn: game.turn ? turnView(game, game.turn, playerId, now) : null,
     history: game.history.map((t) => summary(game, t)),
     scores: G.scores(game),
@@ -166,6 +195,7 @@ function turnView(game: Game, turn: Turn, playerId: string, now: number): TurnVi
     song: isListener || over ? turn.song : null,
     elapsed: elapsed(turn, now),
     paused: turn.pausedAt !== null,
+    albumKnown: turn.song?.album != null,
     deductions: moveDeductions(turn),
     points: pointsLeft(turn, now),
     hints: turn.hints.map((h) => ({ text: h.text, cost: h.cost })),

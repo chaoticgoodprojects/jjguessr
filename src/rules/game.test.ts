@@ -142,3 +142,12 @@ describe("scoring a game", () => {
     expect(code(() => G.nextTurn(g, first))).toBe("turn-not-running");
   });
 });
+
+describe("changing the songs", () => {
+  it("lets the host swap the song list in the lobby only", () => {
+    const g = lobby();
+    expect(G.setSongs(g, "ann", songs.slice(0, 21)).pool).toHaveLength(21);
+    expect(code(() => G.setSongs(g, "bo", songs))).toBe("not-host");
+    expect(code(() => G.setSongs(G.start(g, "ann", first), "ann", songs))).toBe("game-already-started");
+  });
+});
