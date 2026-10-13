@@ -5,12 +5,29 @@
   "description": "Two-team song guessing game for family and friends",
   "type": "module",
   "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "test:e2e": "playwright test",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.web.json && tsc -p tsconfig.worker.json && tsc -p tsconfig.node.json"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "1.61.0",
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.20.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
     "typescript": "5.9.3",
-    "vitest": "3.2.4"
+    "vite": "8.3.1",
+    "vitest": "5.0.2",
+    "wrangler": "4.142.0"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }

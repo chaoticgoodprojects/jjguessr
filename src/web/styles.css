@@ -1,0 +1,100 @@
+/* Chaotic Good house style: grey stock, black ruled panels, Linden Hill, uppercase labels. Light only. */
+:root {
+  color-scheme: light;
+  --stock: #e1e1e1;
+  --lift: #ebebeb;
+  --ink: #111111;
+  --muted: #5b5b5b;
+  --green: #2e9e4f;
+  --rule: 2px solid var(--ink);
+  --font-body: "Linden Hill", "Goudy Old Style", Garamond, serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--stock); color: var(--ink); }
+body {
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.45;
+  padding-inline: 16px;
+  padding-block: max(24px, env(safe-area-inset-top)) max(48px, env(safe-area-inset-bottom));
+}
+
+.page { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.panel { border: var(--rule); background: var(--lift); padding: 16px 18px; min-width: 0; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.stack.tight { gap: 2px; }
+.stack.end { align-items: flex-end; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.row > .input { flex: 1 1 140px; }
+
+h1, h2 { font-weight: 400; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(34px, 9vw, 48px); line-height: 1; }
+h2 { font-size: 22px; display: flex; align-items: center; gap: 8px; }
+p { margin: 0; }
+
+.kicker, .meta, .label, .chip, .button, .tab {
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  font-size: 12px;
+}
+.meta { color: var(--muted); }
+.label { color: var(--muted); }
+
+.masthead { text-align: center; display: flex; flex-direction: column; gap: 8px; padding-block: 22px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.game-code { font-size: 34px; line-height: 1; letter-spacing: .12em; font-variant-numeric: lining-nums; }
+
+.button, .tab {
+  font-family: var(--font-body);
+  border: var(--rule);
+  background: var(--stock);
+  color: var(--ink);
+  padding: 12px 16px;
+  cursor: pointer;
+  border-radius: 0;
+}
+.button:hover:not(:disabled), .tab:hover { background: var(--lift); }
+.button.primary { background: var(--ink); color: var(--stock); font-size: 13px; }
+.button.primary:hover:not(:disabled) { background: #2a2a2a; }
+.button.small { padding: 6px 10px; font-size: 11px; }
+.button:disabled { opacity: .45; cursor: not-allowed; }
+
+.tabs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.tab { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; }
+.tab.selected { background: var(--ink); color: var(--stock); }
+.tab.selected .dot.black { border-color: var(--stock); }
+
+.input {
+  font-family: var(--font-body);
+  font-size: 20px;
+  padding: 10px 12px;
+  border: var(--rule);
+  background: var(--stock);
+  color: var(--ink);
+  border-radius: 0;
+  min-width: 0;
+}
+.code-input { text-transform: uppercase; letter-spacing: .2em; }
+
+:focus-visible { outline: 2px dashed var(--ink); outline-offset: 3px; }
+
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--ink); flex: none; }
+.dot.green { background: var(--green); }
+.dot.black { background: var(--ink); }
+
+.chip { border: 1.5px solid var(--ink); padding: 0 6px; font-size: 10px; line-height: 1.8; white-space: nowrap; }
+.chip.solid { background: var(--ink); color: var(--stock); }
+.chip.dashed { border-style: dashed; }
+
+.teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.roster { list-style: none; margin: 0; padding: 0; }
+.roster li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1.5px solid var(--ink); font-size: 19px; }
+.roster li:last-child { border-bottom: 0; }
+.roster li.offline > span:first-child { color: var(--muted); }
+
+.scores { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.score { border: var(--rule); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.big { font-size: 40px; line-height: 1; font-variant-numeric: lining-nums tabular-nums; }
+
+.notice { border: 2px dashed var(--ink); padding: 10px 14px; background: var(--lift); }
