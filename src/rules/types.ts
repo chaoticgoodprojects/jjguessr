@@ -6,7 +6,8 @@ export interface Song {
   id: string;
   title: string;
   artist: string;
-  album: string;
+  /** Null when the source doesn't say (public Spotify playlist pages list no albums). */
+  album: string | null;
 }
 
 export interface Player {

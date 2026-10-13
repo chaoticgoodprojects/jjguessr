@@ -23,18 +23,27 @@ export function normalizeTitle(raw: string): string {
 }
 
 /** Album names get the same treatment, so "Weezer (Blue Album)" by Weezer reads as self-titled. */
-export function isSelfTitled(artist: string, album: string): boolean {
+export function isSelfTitled(artist: string, album: string | null): boolean {
+  if (album === null) return false;
   const a = normalizeTitle(artist);
   return a.length > 0 && a === normalizeTitle(album);
 }
 
+/**
+ * A title in brackets can be the main part ("(I Can't Get No) Satisfaction",
+ * "Single Ladies (Put a Ring on It)"), so a guess matches either the title
+ * without its bracketed parts or the whole title with just the brackets dropped.
+ */
 export function titleMatches(guess: string, title: string): boolean {
   const g = normalizeTitle(guess);
-  const t = normalizeTitle(title);
-  if (g.length === 0 || t.length === 0) return false;
-  if (g === t) return true;
-  if (t.length < FUZZY_MIN_LENGTH) return false;
-  return similarity(g, t) >= SIMILARITY_NEEDED;
+  if (g.length === 0) return false;
+  const forms = new Set([normalizeTitle(title), normalizeTitle(title.replace(/[()[\]{}]/g, " "))]);
+  for (const t of forms) {
+    if (t.length === 0) continue;
+    if (g === t) return true;
+    if (t.length >= FUZZY_MIN_LENGTH && similarity(g, t) >= SIMILARITY_NEEDED) return true;
+  }
+  return false;
 }
 
 function similarity(a: string, b: string): number {

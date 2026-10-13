@@ -11,7 +11,8 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "types": []
+    "types": ["node"]
   },
-  "include": ["src/rules", "src/shared", "src/server/room.ts", "src/server/room.test.ts", "src/server/sample-songs.ts"]
+  "include": ["src/rules", "src/shared", "src/server"],
+  "exclude": ["src/server/worker.ts", "src/server/room-object.ts"]
 }

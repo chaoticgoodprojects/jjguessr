@@ -95,9 +95,7 @@ function PickSong({ turn, send }: { turn: TurnView; send: Send }) {
               onClick={() => send({ type: "pick", songId: s.id })}
             >
               <span className="song-title">{s.title}</span>
-              <span className="meta">
-                {s.artist} · {s.album}
-              </span>
+              <span className="meta">{s.album ? `${s.artist} · ${s.album}` : s.artist}</span>
             </button>
           </li>
         ))}
@@ -115,7 +113,13 @@ function SongCard({ song }: { song: Song }) {
       <span className="label">Your song</span>
       <span className="song-title big-title">{song.title}</span>
       <span>
-        {song.artist} · <em>{song.album}</em>
+        {song.artist}
+        {song.album && (
+          <>
+            {" "}
+            · <em>{song.album}</em>
+          </>
+        )}
       </span>
     </section>
   );
@@ -166,7 +170,7 @@ function ListenerControls({ turn, send }: { turn: TurnView; send: Send }) {
             <ConfirmButton
               key={kind}
               className="button"
-              disabled={turn.revealBlocker !== null}
+              disabled={turn.revealBlocker !== null || (kind === "album" && !turn.albumKnown)}
               confirmLabel={`Tap again: −${RULES.revealCost}`}
               onConfirm={() => send({ type: "reveal", kind })}
             >
@@ -176,6 +180,9 @@ function ListenerControls({ turn, send }: { turn: TurnView; send: Send }) {
         </div>
         {turn.revealBlocker === "self-titled" && <span className="meta">Self-titled album, so no reveal this turn.</span>}
         {turn.revealBlocker === "already-revealed" && <span className="meta">Already revealed this turn.</span>}
+        {turn.revealBlocker === null && !turn.albumKnown && (
+          <span className="meta">This playlist doesn't list albums, so only the artist can be revealed.</span>
+        )}
       </div>
     </section>
   );

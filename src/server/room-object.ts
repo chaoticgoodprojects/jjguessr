@@ -6,8 +6,22 @@
  */
 import { DurableObject } from "cloudflare:workers";
 import { isToken, parseClientMessage, type ServerMessage } from "../shared/protocol";
-import { createRoom, handle, nextAlarm, ROOM_TTL_MS, seat, syncPresence, tickRoom, viewFor, type RoomData } from "./room";
-import { SAMPLE_SONGS } from "./sample-songs";
+import {
+  attempt,
+  canChangeSongs,
+  createRoom,
+  handle,
+  nextAlarm,
+  ROOM_TTL_MS,
+  seat,
+  syncPresence,
+  tickRoom,
+  useSongs,
+  viewFor,
+  type HandleResult,
+  type RoomData,
+} from "./room";
+import { fetchPublicPlaylist, playlistIdFrom } from "./spotify";
 
 const STORAGE_KEY = "room";
 
@@ -39,9 +53,22 @@ export class RoomObject extends DurableObject<Env> {
     const msg = typeof raw === "string" ? parseClientMessage(raw) : null;
     if (!msg) return send(ws, { type: "error", message: "The app sent something the game didn't understand. Try reloading." });
     const { playerId } = ws.deserializeAttachment() as Attachment;
-    const result = handle(this.room, playerId, msg, Date.now());
+    const result = msg.type === "usePlaylist" ? await this.loadPlaylist(playerId, msg.link) : handle(this.room, playerId, msg, Date.now());
     if (!result.ok) return send(ws, { type: "error", message: result.message });
     await this.update(result.room);
+  }
+
+  /** Reads a pasted public playlist and, if the room still allows it after the fetch, swaps it in. */
+  private async loadPlaylist(playerId: string, link: string): Promise<HandleResult> {
+    const allowed = canChangeSongs(this.room!, playerId);
+    if (!allowed.ok) return allowed;
+    const id = playlistIdFrom(link);
+    if (!id) return { ok: false, message: "That doesn't look like a Spotify playlist link. Copy it from Share → Copy link to playlist." };
+    const playlist = await fetchPublicPlaylist(id);
+    if (!playlist.ok) return playlist;
+    // Other moves may have landed while we waited on Spotify, so apply to the room as it is now.
+    if (!this.room) return { ok: false, message: "This game has expired." };
+    return attempt(() => useSongs(this.room!, playerId, playlist.songs, { kind: "playlist", name: playlist.name }, Date.now()));
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
@@ -69,7 +96,7 @@ export class RoomObject extends DurableObject<Env> {
   private async init(request: Request): Promise<Response> {
     if (this.room) return new Response("Code taken", { status: 409 });
     const { code, token } = (await request.json()) as { code: string; token: string };
-    await this.save(createRoom(code, token, SAMPLE_SONGS, Date.now(), newId));
+    await this.save(createRoom(code, token, Date.now(), newId));
     return new Response(null, { status: 201 });
   }
 

@@ -8,6 +8,8 @@ import type { RevealKind, Song, TeamId, TurnEndReason } from "../rules";
 export type ClientMessage =
   | { type: "join"; name: string; team: TeamId }
   | { type: "start" }
+  | { type: "usePack"; packId: string }
+  | { type: "usePlaylist"; link: string }
   | { type: "pick"; songId: string }
   | { type: "startClock" }
   | { type: "hint"; text: string }
@@ -44,6 +46,8 @@ export interface TurnView {
   /** Seconds on the clock when this view was sent. */
   elapsed: number;
   paused: boolean;
+  /** False for songs from a pasted playlist, which only allow the artist reveal. */
+  albumKnown: boolean;
   /** Points lost to extra hints, wrong guesses and the reveal. Time comes off on top. */
   deductions: number;
   points: number;
@@ -66,6 +70,15 @@ export interface TurnSummary {
   reason: TurnEndReason;
 }
 
+/** Where the game's songs come from. */
+export type SongSource = { kind: "pack"; id: string; name: string } | { kind: "playlist"; name: string };
+
+export interface PackInfo {
+  id: string;
+  name: string;
+  count: number;
+}
+
 export interface RoomView {
   code: string;
   phase: "lobby" | "playing" | "finished";
@@ -77,6 +90,8 @@ export interface RoomView {
   /** Why the host can't start yet, or null when they can. */
   startBlocker: string | null;
   songCount: number;
+  source: SongSource;
+  packs: PackInfo[];
   turn: TurnView | null;
   history: TurnSummary[];
   scores: Record<TeamId, number>;
@@ -116,6 +131,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
         : null;
     case "pick":
       return typeof o.songId === "string" ? { type: "pick", songId: o.songId } : null;
+    case "usePack":
+      return typeof o.packId === "string" ? { type: "usePack", packId: o.packId } : null;
+    case "usePlaylist":
+      return typeof o.link === "string" ? { type: "usePlaylist", link: o.link } : null;
     case "hint":
     case "guess":
       return typeof o.text === "string" ? { type: o.type, text: o.text } : null;

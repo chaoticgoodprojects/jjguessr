@@ -10,6 +10,7 @@ export type RuleErrorCode =
   | "text-too-long"
   | "already-revealed"
   | "self-titled"
+  | "no-album"
   | "no-such-guess"
   | "already-correct"
   | "cannot-count"
