@@ -13,5 +13,5 @@
     "verbatimModuleSyntax": true,
     "types": []
   },
-  "include": ["src"]
+  "include": ["src/rules", "src/shared", "src/server/room.ts", "src/server/room.test.ts", "src/server/sample-songs.ts"]
 }

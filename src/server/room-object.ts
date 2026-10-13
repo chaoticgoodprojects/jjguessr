@@ -1,0 +1,116 @@
+/**
+ * The Durable Object that hosts one room. It keeps the RoomData in storage,
+ * holds every player's WebSocket (hibernation API, so idle rooms cost
+ * nothing), and after each change sends every player their own view.
+ */
+import { DurableObject } from "cloudflare:workers";
+import { isToken, parseClientMessage, type ServerMessage } from "../shared/protocol";
+import { createRoom, handle, ROOM_TTL_MS, seat, viewFor, type RoomData } from "./room";
+import { SAMPLE_SONGS } from "./sample-songs";
+
+const STORAGE_KEY = "room";
+
+interface Attachment {
+  playerId: string;
+}
+
+export class RoomObject extends DurableObject<Env> {
+  private room: RoomData | null = null;
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    ctx.blockConcurrencyWhile(async () => {
+      this.room = (await ctx.storage.get<RoomData>(STORAGE_KEY)) ?? null;
+    });
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    if (url.pathname === "/init" && request.method === "POST") return this.init(request);
+    if (!this.room) return new Response("No game with that code.", { status: 404 });
+    if (url.pathname === "/info") return Response.json({ code: this.room.code, phase: this.room.game.phase });
+    if (url.pathname === "/ws") return this.openSocket(request, url);
+    return new Response("Not found", { status: 404 });
+  }
+
+  async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
+    if (!this.room) return;
+    const msg = typeof raw === "string" ? parseClientMessage(raw) : null;
+    if (!msg) return send(ws, { type: "error", message: "The app sent something the game didn't understand. Try reloading." });
+    const { playerId } = ws.deserializeAttachment() as Attachment;
+    const result = handle(this.room, playerId, msg, Date.now());
+    if (!result.ok) return send(ws, { type: "error", message: result.message });
+    await this.save(result.room);
+    this.broadcast();
+  }
+
+  async webSocketClose(ws: WebSocket): Promise<void> {
+    this.broadcast(ws);
+  }
+
+  async webSocketError(ws: WebSocket): Promise<void> {
+    this.broadcast(ws);
+  }
+
+  async alarm(): Promise<void> {
+    if (!this.room) return;
+    const expiresAt = this.room.lastActiveAt + ROOM_TTL_MS;
+    if (Date.now() < expiresAt) {
+      await this.ctx.storage.setAlarm(expiresAt);
+      return;
+    }
+    for (const ws of this.ctx.getWebSockets()) ws.close(1000, "This game has expired.");
+    this.room = null;
+    await this.ctx.storage.deleteAll();
+  }
+
+  private async init(request: Request): Promise<Response> {
+    if (this.room) return new Response("Code taken", { status: 409 });
+    const { code, token } = (await request.json()) as { code: string; token: string };
+    await this.save(createRoom(code, token, SAMPLE_SONGS, Date.now(), newId));
+    return new Response(null, { status: 201 });
+  }
+
+  private async openSocket(request: Request, url: URL): Promise<Response> {
+    if (request.headers.get("Upgrade") !== "websocket") return new Response("Expected a WebSocket", { status: 426 });
+    const token = url.searchParams.get("token") ?? "";
+    if (!isToken(token)) return new Response("Bad token", { status: 400 });
+    const seated = seat(this.room!, token, newId);
+    if (seated.room !== this.room) await this.save(seated.room);
+
+    const { 0: client, 1: server } = new WebSocketPair();
+    this.ctx.acceptWebSocket(server);
+    server.serializeAttachment({ playerId: seated.playerId } satisfies Attachment);
+    this.broadcast();
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  private async save(room: RoomData): Promise<void> {
+    this.room = room;
+    await this.ctx.storage.put(STORAGE_KEY, room);
+    await this.ctx.storage.setAlarm(room.lastActiveAt + ROOM_TTL_MS);
+  }
+
+  /** Sends every open connection its own view. `closing` is left out of who's online. */
+  private broadcast(closing?: WebSocket): void {
+    if (!this.room) return;
+    const sockets = this.ctx.getWebSockets().filter((ws) => ws !== closing && ws.readyState === WebSocket.OPEN);
+    const online = new Set(sockets.map((ws) => (ws.deserializeAttachment() as Attachment).playerId));
+    for (const ws of sockets) {
+      const { playerId } = ws.deserializeAttachment() as Attachment;
+      send(ws, { type: "state", state: viewFor(this.room, playerId, online) });
+    }
+  }
+}
+
+function send(ws: WebSocket, msg: ServerMessage): void {
+  try {
+    ws.send(JSON.stringify(msg));
+  } catch {
+    // The socket closed between the check and the send; its close handler will rebroadcast.
+  }
+}
+
+function newId(): string {
+  return crypto.randomUUID().slice(0, 8);
+}
