@@ -126,6 +126,9 @@ export function reveal(turn: Turn, kind: RevealKind, now: number): Turn {
       ? new RuleError("self-titled", "This song is on a self-titled album, so neither the artist nor the album can be revealed.")
       : new RuleError("already-revealed", "The artist or album has already been revealed this turn.");
   }
+  if (elapsed(t, now) < RULES.revealAfterSeconds) {
+    throw new RuleError("too-early", `The artist or album can be revealed once ${RULES.revealAfterSeconds / 60} minutes have passed.`);
+  }
   const song = pickedSong(t);
   const value = kind === "artist" ? song.artist : song.album;
   if (value === null) throw new RuleError("no-album", "This playlist doesn't say which album the song is on, so only the artist can be revealed.");

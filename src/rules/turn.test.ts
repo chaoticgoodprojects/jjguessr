@@ -114,17 +114,29 @@ describe("guesses", () => {
 });
 
 describe("reveal", () => {
+  it("waits until 2 minutes have passed", () => {
+    expect(code(() => T.reveal(running(), "artist", at(119.9)))).toBe("too-early");
+    expect(T.reveal(running(), "artist", at(120)).reveal).toMatchObject({ kind: "artist", value: "Queen" });
+  });
+
+  it("doesn't count paused time toward the 2 minutes", () => {
+    let t = T.pause(running(), at(100));
+    t = T.resume(t, at(160));
+    expect(code(() => T.reveal(t, "artist", at(170)))).toBe("too-early");
+    expect(T.reveal(t, "artist", at(180)).reveal).not.toBeNull();
+  });
+
   it("reveals the artist or the album once, for 50", () => {
-    let t = T.reveal(running(), "artist", at(0));
+    let t = T.reveal(running(), "artist", at(120));
     expect(t.reveal).toMatchObject({ kind: "artist", value: "Queen" });
-    expect(T.pointsLeft(t, at(0))).toBe(50);
-    expect(code(() => T.reveal(t, "album", at(1)))).toBe("already-revealed");
+    expect(T.pointsLeft(t, at(120))).toBe(30); // 100 − 20 for the time − 50
+    expect(code(() => T.reveal(t, "album", at(121)))).toBe("already-revealed");
   });
 
   it("is not allowed on a self-titled album", () => {
     const t = running(SELF_TITLED);
     expect(T.canReveal(t)).toEqual({ ok: false, reason: "self-titled" });
-    expect(code(() => T.reveal(t, "album", at(1)))).toBe("self-titled");
+    expect(code(() => T.reveal(t, "album", at(130)))).toBe("self-titled");
   });
 });
 
@@ -139,12 +151,13 @@ describe("worked examples from the plan", () => {
     expect(t.result).toEqual({ reason: "guessed", points: 65, at: 90 });
   });
 
-  it("B: a 4th hint then a reveal at 1:00 ends the turn on 0", () => {
+  it("B: a 4th hint at 1:00 then a reveal at 2:00 ends the turn on 0", () => {
     let t = running();
     for (const h of ["a", "b", "c", "d"]) t = T.giveHint(t, h, at(60));
     expect(T.pointsLeft(t, at(60))).toBe(40);
-    t = T.reveal(t, "album", at(60));
-    expect(t.result).toEqual({ reason: "no-points", points: 0, at: 60 });
+    expect(T.pointsLeft(t, at(120))).toBe(30);
+    t = T.reveal(t, "album", at(120));
+    expect(t.result).toEqual({ reason: "no-points", points: 0, at: 120 });
   });
 });
 
@@ -208,7 +221,7 @@ describe("songs without an album", () => {
 
   it("still allows revealing the artist, but not the album", () => {
     const t = T.startClock(T.pickSong(ready([NO_ALBUM]), NO_ALBUM.id), T0);
-    expect(code(() => T.reveal(t, "album", at(1)))).toBe("no-album");
-    expect(T.reveal(t, "artist", at(1)).reveal).toMatchObject({ kind: "artist", value: "Someone" });
+    expect(code(() => T.reveal(t, "album", at(120)))).toBe("no-album");
+    expect(T.reveal(t, "artist", at(120)).reveal).toMatchObject({ kind: "artist", value: "Someone" });
   });
 });

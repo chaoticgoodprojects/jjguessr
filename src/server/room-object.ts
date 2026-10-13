@@ -12,6 +12,8 @@ import {
   createRoom,
   handle,
   nextAlarm,
+  rejoin,
+  returningPlayer,
   ROOM_TTL_MS,
   seat,
   syncPresence,
@@ -27,6 +29,8 @@ const STORAGE_KEY = "room";
 
 interface Attachment {
   playerId: string;
+  /** Missing on sockets opened before rejoining existed. */
+  token?: string;
 }
 
 export class RoomObject extends DurableObject<Env> {
@@ -52,10 +56,29 @@ export class RoomObject extends DurableObject<Env> {
     if (!this.room) return;
     const msg = typeof raw === "string" ? parseClientMessage(raw) : null;
     if (!msg) return send(ws, { type: "error", message: "The app sent something the game didn't understand. Try reloading." });
-    const { playerId } = ws.deserializeAttachment() as Attachment;
+    const { playerId, token } = ws.deserializeAttachment() as Attachment;
+
+    // Coming back as an away player, by tapping their name or typing it again.
+    const comingBack =
+      msg.type === "rejoin" ? msg.playerId : msg.type === "join" ? returningPlayer(this.room, playerId, msg.name, this.online()) : null;
+    if (comingBack) {
+      if (!token) return send(ws, { type: "error", message: "Reload the page and try again." });
+      const seated = rejoin(this.room, token, playerId, comingBack, this.online());
+      if (!seated.ok) return send(ws, { type: "error", message: seated.message });
+      ws.serializeAttachment({ playerId: seated.playerId, token } satisfies Attachment);
+      return this.update(seated.room);
+    }
+    if (msg.type === "rejoin") return;
+
     const result = msg.type === "usePlaylist" ? await this.loadPlaylist(playerId, msg.link) : handle(this.room, playerId, msg, Date.now());
     if (!result.ok) return send(ws, { type: "error", message: result.message });
     await this.update(result.room);
+  }
+
+  /** Public ids with an open connection, leaving out a socket on its way out. */
+  private online(closing?: WebSocket): Set<string> {
+    const sockets = this.ctx.getWebSockets().filter((ws) => ws !== closing && ws.readyState === WebSocket.OPEN);
+    return new Set(sockets.map((ws) => (ws.deserializeAttachment() as Attachment).playerId));
   }
 
   /** Reads a pasted public playlist and, if the room still allows it after the fetch, swaps it in. */
@@ -108,7 +131,7 @@ export class RoomObject extends DurableObject<Env> {
 
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ playerId: seated.playerId } satisfies Attachment);
+    server.serializeAttachment({ playerId: seated.playerId, token } satisfies Attachment);
     await this.update(seated.room);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -120,7 +143,7 @@ export class RoomObject extends DurableObject<Env> {
   private async update(room: RoomData, closing?: WebSocket): Promise<void> {
     const now = Date.now();
     const sockets = this.ctx.getWebSockets().filter((ws) => ws !== closing && ws.readyState === WebSocket.OPEN);
-    const online = new Set(sockets.map((ws) => (ws.deserializeAttachment() as Attachment).playerId));
+    const online = this.online(closing);
     const synced = syncPresence(room, online, now);
     if (synced !== this.room) await this.save(synced);
     for (const ws of sockets) {

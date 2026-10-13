@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseClientMessage } from "../shared/protocol";
 import { PACKS } from "./packs";
-import { createRoom, handle, nextAlarm, ROOM_TTL_MS, seat, syncPresence, viewFor, type SyncMessage } from "./room";
+import { createRoom, handle, nextAlarm, rejoin, returningPlayer, ROOM_TTL_MS, seat, syncPresence, viewFor, type SyncMessage } from "./room";
 
 const NOW = 1_000_000;
 const ids = () => {
@@ -194,5 +194,61 @@ describe("song packs", () => {
     expect(pack.songs.length).toBeGreaterThanOrEqual(20);
     const titles = new Set(pack.songs.map((s) => `${s.title}|${s.artist}`));
     expect(titles.size).toBe(pack.songs.length);
+  });
+});
+
+describe("coming back after the browser forgot you", () => {
+  it("gives an away player's seat to whoever types their name again", () => {
+    const { seatOf, room, setRoom, ann, bo } = started();
+    const fresh = seatOf("bo-new-browser-0000");
+    const online = new Set([ann, fresh]);
+    expect(returningPlayer(room(), fresh, " bo ", online)).toBe(bo);
+    expect(returningPlayer(room(), fresh, "Zed", online)).toBeNull();
+    // Someone already playing doesn't get moved by typing a name.
+    expect(returningPlayer(room(), ann, "Bo", online)).toBeNull();
+
+    const r = rejoin(room(), "bo-new-browser-0000", fresh, bo, online);
+    expect(r).toMatchObject({ ok: true, playerId: bo });
+    if (r.ok) setRoom(r.room);
+    expect(seatOf("bo-new-browser-0000")).toBe(bo);
+    expect(room().game.players).toHaveLength(4);
+  });
+
+  it("won't hand over a seat that's in use, or seat someone twice", () => {
+    const { seatOf, room, ann, bo } = started();
+    const fresh = seatOf("someone-else-00000");
+    expect(returningPlayer(room(), fresh, "Bo", new Set([bo]))).toBeNull();
+    expect(rejoin(room(), "someone-else-00000", fresh, bo, new Set([bo]))).toMatchObject({ ok: false });
+    expect(rejoin(room(), "host-token-0000000", ann, bo, new Set())).toMatchObject({
+      ok: false,
+      message: "You're already playing as Ann.",
+    });
+  });
+
+  it("tells a newcomer when the name is taken by someone who's here", () => {
+    const { seatOf, act } = started();
+    const fresh = seatOf("newcomer-token-000");
+    expect(act(fresh, { type: "join", name: "ann", team: "green" })).toMatchObject({ ok: false, message: expect.stringContaining("already called Ann") });
+  });
+});
+
+describe("the host moving and removing players", () => {
+  it("goes through the room like any other move", () => {
+    const { seatOf, act, room } = setup();
+    const host = seatOf("host-token-0000000");
+    const b = seatOf("b-token-0000000000");
+    act(host, { type: "join", name: "Ann", team: "green" });
+    act(b, { type: "join", name: "Bo", team: "black" });
+    expect(act(b, { type: "move", playerId: host, team: "black" })).toMatchObject({ ok: false, message: "Only the host can do that." });
+    act(host, { type: "move", playerId: b, team: "green" });
+    expect(viewFor(room(), host, new Set(), NOW).teams.green.map((p) => p.name)).toEqual(["Ann", "Bo"]);
+    act(host, { type: "remove", playerId: b });
+    expect(viewFor(room(), b, new Set(), NOW).you).toBeNull();
+  });
+
+  it("parses the new moves", () => {
+    expect(parseClientMessage(JSON.stringify({ type: "rejoin", playerId: "p2" }))).toEqual({ type: "rejoin", playerId: "p2" });
+    expect(parseClientMessage(JSON.stringify({ type: "move", playerId: "p2", team: "pink" }))).toBeNull();
+    expect(parseClientMessage(JSON.stringify({ type: "remove" }))).toBeNull();
   });
 });

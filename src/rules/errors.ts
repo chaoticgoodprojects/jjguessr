@@ -10,6 +10,7 @@ export type RuleErrorCode =
   | "text-too-long"
   | "already-revealed"
   | "self-titled"
+  | "too-early"
   | "no-album"
   | "no-such-guess"
   | "already-correct"
@@ -23,7 +24,10 @@ export type RuleErrorCode =
   | "not-listener"
   | "not-guesser"
   | "not-host"
-  | "unknown-player";
+  | "unknown-player"
+  | "name-taken"
+  | "listener-busy"
+  | "cant-remove-host";
 
 /** A move the rules don't allow. The message is shown to players as is. */
 export class RuleError extends Error {

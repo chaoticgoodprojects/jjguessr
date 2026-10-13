@@ -1,13 +1,20 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { TEAMS, type TeamId } from "../rules";
-import type { ClientMessage, PlayerView, RoomView } from "../shared/protocol";
+import type { ClientMessage, RoomView } from "../shared/protocol";
 import { Finished } from "./Finished";
-import { lastName, rememberName } from "./identity";
-import { TEAM_NAME, TurnScreen } from "./Turn";
+import { markRulesSeen, rulesSeen } from "./identity";
+import { JoinForm, Players } from "./Players";
+import { RulesDialog } from "./Rules";
+import { TurnScreen } from "./Turn";
 import { useRoom } from "./useRoom";
 
 export function Room({ code, onHome }: { code: string; onHome: () => void }) {
   const { view, connection, error, send } = useRoom(code);
+  // The rules pop up the first time this browser opens a game, and the ? button brings them back.
+  const [rulesOpen, setRulesOpen] = useState(() => !rulesSeen(code));
+  const closeRules = () => {
+    markRulesSeen(code);
+    setRulesOpen(false);
+  };
 
   if (connection === "missing") {
     return (
@@ -25,7 +32,8 @@ export function Room({ code, onHome }: { code: string; onHome: () => void }) {
 
   return (
     <main className="page">
-      <TopBar code={code} connection={connection} />
+      <TopBar code={code} connection={connection} onRules={() => setRulesOpen(true)} />
+      <RulesDialog open={rulesOpen} onClose={closeRules} />
       {!view ? (
         <p className="meta">Connecting…</p>
       ) : view.phase === "lobby" ? (
@@ -44,7 +52,7 @@ export function Room({ code, onHome }: { code: string; onHome: () => void }) {
   );
 }
 
-function TopBar({ code, connection }: { code: string; connection: string }) {
+function TopBar({ code, connection, onRules }: { code: string; connection: string; onRules: () => void }) {
   const [copied, setCopied] = useState(false);
   const link = `${location.origin}/r/${code}`;
   const copy = async () => {
@@ -65,9 +73,14 @@ function TopBar({ code, connection }: { code: string; connection: string }) {
         </span>
       </div>
       <div className="stack tight end">
-        <button className="button small" onClick={copy}>
-          {copied ? "Link copied" : "Copy game link"}
-        </button>
+        <div className="row center">
+          <button className="button small" onClick={copy}>
+            {copied ? "Link copied" : "Copy game link"}
+          </button>
+          <button className="help" aria-label="Rules" onClick={onRules}>
+            ?
+          </button>
+        </div>
         {connection === "reconnecting" && <span className="meta">Reconnecting…</span>}
       </div>
     </header>
@@ -78,15 +91,8 @@ function Lobby({ view, send, error }: { view: RoomView; send: (m: ClientMessage)
   const host = [...view.teams.green, ...view.teams.black].find((p) => p.id === view.hostId);
   return (
     <>
-      {view.you ? (
-        <section className="teams">
-          {TEAMS.map((team) => (
-            <TeamPanel key={team} team={team} view={view} send={send} />
-          ))}
-        </section>
-      ) : (
-        <JoinForm send={send} />
-      )}
+      {!view.you && <JoinForm view={view} send={send} />}
+      <Players view={view} send={send} />
 
       <Songs view={view} send={send} error={error} />
 
@@ -106,83 +112,6 @@ function Lobby({ view, send, error }: { view: RoomView; send: (m: ClientMessage)
         )}
       </section>
     </>
-  );
-}
-
-function JoinForm({ send }: { send: (m: ClientMessage) => void }) {
-  const [name, setName] = useState(lastName);
-  const [team, setTeam] = useState<TeamId | null>(null);
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!team) return;
-    rememberName(name.trim());
-    send({ type: "join", name, team });
-  };
-
-  return (
-    <form className="panel stack" onSubmit={submit}>
-      <h2>Join this game</h2>
-      <label className="label" htmlFor="name">
-        Your name
-      </label>
-      <input id="name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={24} autoComplete="nickname" />
-      <span className="label">Team</span>
-      <div className="tabs" role="radiogroup" aria-label="Team">
-        {TEAMS.map((t) => (
-          <button
-            key={t}
-            type="button"
-            role="radio"
-            aria-checked={team === t}
-            className={`tab ${team === t ? "selected" : ""}`}
-            onClick={() => setTeam(t)}
-          >
-            <span className={`dot ${t}`} /> {TEAM_NAME[t]}
-          </button>
-        ))}
-      </div>
-      <button className="button primary" type="submit" disabled={!name.trim() || !team}>
-        Join
-      </button>
-    </form>
-  );
-}
-
-function TeamPanel({ team, view, send }: { team: TeamId; view: RoomView; send: (m: ClientMessage) => void }) {
-  const players = view.teams[team];
-  const mine = view.you?.team === team;
-  return (
-    <div className="panel stack" data-team={team}>
-      <h2>
-        <span className={`dot ${team}`} /> {TEAM_NAME[team]}
-      </h2>
-      {players.length === 0 ? (
-        <p className="meta">No one yet</p>
-      ) : (
-        <ul className="roster">
-          {players.map((p) => (
-            <PlayerRow key={p.id} player={p} view={view} />
-          ))}
-        </ul>
-      )}
-      {!mine && view.you && (
-        <button className="button small" onClick={() => send({ type: "join", name: view.you!.name, team })}>
-          Switch to {TEAM_NAME[team]}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function PlayerRow({ player, view }: { player: PlayerView; view: RoomView }) {
-  return (
-    <li className={player.connected ? "" : "offline"}>
-      <span>{player.name}</span>
-      {player.id === view.you?.id && <span className="chip solid">You</span>}
-      {player.id === view.hostId && <span className="chip">Host</span>}
-      {!player.connected && <span className="chip dashed">Away</span>}
-    </li>
   );
 }
 

@@ -45,3 +45,12 @@ export function lastName(): string {
 export function rememberName(name: string): void {
   write(NAME_KEY, name);
 }
+
+/** Whether this browser has already been shown the rules for a game. */
+export function rulesSeen(code: string): boolean {
+  return read(`jjguessr.rules.${code}`) !== null;
+}
+
+export function markRulesSeen(code: string): void {
+  write(`jjguessr.rules.${code}`, "1");
+}

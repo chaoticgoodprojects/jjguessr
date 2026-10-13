@@ -28,7 +28,6 @@ export function Home({ onOpenGame }: { onOpenGame: (code: string) => void }) {
   return (
     <main className="page">
       <header className="masthead panel">
-        <span className="kicker">Chaotic Good Projects</span>
         <h1>jjguessr</h1>
         <span className="meta">Two teams · 10 rounds · Name that song</span>
       </header>

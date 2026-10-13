@@ -1,4 +1,4 @@
-/* Chaotic Good house style: grey stock, black ruled panels, Linden Hill, uppercase labels. Light only. */
+/* House style: grey stock, black ruled panels, Linden Hill, uppercase labels. Light only. */
 :root {
   color-scheme: light;
   --stock: #e1e1e1;
@@ -87,9 +87,15 @@ p { margin: 0; }
 .chip.solid { background: var(--ink); color: var(--stock); }
 .chip.dashed { border-style: dashed; }
 
-.teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+/* Green always on the left and black on the right, phones included. */
+.teams { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.team { padding: 12px; }
+.team h2 { font-size: 20px; }
 .roster { list-style: none; margin: 0; padding: 0; }
-.roster li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1.5px solid var(--ink); font-size: 19px; }
+.roster li { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1.5px solid var(--ink); font-size: 19px; }
+.team .roster li { font-size: 17px; }
+.player-name { overflow-wrap: anywhere; min-width: 0; }
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; flex-basis: 100%; }
 .roster li:last-child { border-bottom: 0; }
 .roster li.offline > span:first-child { color: var(--muted); }
 
@@ -134,3 +140,24 @@ p { margin: 0; }
 .folder-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
 .tab.small { padding: 7px 11px; font-size: 11px; }
 .small-input { font-size: 16px; }
+
+.row.center { align-items: center; }
+.help {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: var(--rule);
+  background: var(--stock);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+.help:hover { background: var(--lift); }
+
+dialog.rules { border: 0; padding: 0; background: transparent; max-width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); color: var(--ink); }
+dialog.rules::backdrop { background: rgb(225 225 225 / .85); }
+dialog.rules .panel { border-width: 2.5px; }
+.rule-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
