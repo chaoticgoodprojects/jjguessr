@@ -5,12 +5,14 @@ export * from "./types";
 export {
   createTurn,
   elapsed,
+  endsAt,
   secondsLeft,
   timePenalty,
   pointsLeft,
   nextHintCost,
   freeHintsLeft,
   canReveal,
+  moveDeductions,
 } from "./turn";
 export * as game from "./game";
 export type { Game, Rng } from "./game";

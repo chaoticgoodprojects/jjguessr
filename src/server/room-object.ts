@@ -1,11 +1,12 @@
 /**
  * The Durable Object that hosts one room. It keeps the RoomData in storage,
  * holds every player's WebSocket (hibernation API, so idle rooms cost
- * nothing), and after each change sends every player their own view.
+ * nothing), and after each change sends every player their own view. Its
+ * single alarm fires when a turn's time runs out or the room expires.
  */
 import { DurableObject } from "cloudflare:workers";
 import { isToken, parseClientMessage, type ServerMessage } from "../shared/protocol";
-import { createRoom, handle, ROOM_TTL_MS, seat, viewFor, type RoomData } from "./room";
+import { createRoom, handle, nextAlarm, ROOM_TTL_MS, seat, syncPresence, tickRoom, viewFor, type RoomData } from "./room";
 import { SAMPLE_SONGS } from "./sample-songs";
 
 const STORAGE_KEY = "room";
@@ -40,28 +41,29 @@ export class RoomObject extends DurableObject<Env> {
     const { playerId } = ws.deserializeAttachment() as Attachment;
     const result = handle(this.room, playerId, msg, Date.now());
     if (!result.ok) return send(ws, { type: "error", message: result.message });
-    await this.save(result.room);
-    this.broadcast();
+    await this.update(result.room);
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
-    this.broadcast(ws);
+    if (this.room) await this.update(this.room, ws);
   }
 
   async webSocketError(ws: WebSocket): Promise<void> {
-    this.broadcast(ws);
+    if (this.room) await this.update(this.room, ws);
   }
 
   async alarm(): Promise<void> {
     if (!this.room) return;
-    const expiresAt = this.room.lastActiveAt + ROOM_TTL_MS;
-    if (Date.now() < expiresAt) {
-      await this.ctx.storage.setAlarm(expiresAt);
+    const now = Date.now();
+    if (now >= this.room.lastActiveAt + ROOM_TTL_MS) {
+      for (const ws of this.ctx.getWebSockets()) ws.close(1000, "This game has expired.");
+      this.room = null;
+      await this.ctx.storage.deleteAll();
       return;
     }
-    for (const ws of this.ctx.getWebSockets()) ws.close(1000, "This game has expired.");
-    this.room = null;
-    await this.ctx.storage.deleteAll();
+    await this.update(tickRoom(this.room, now));
+    // update() only re-arms when something changed; an early wake still needs the next one.
+    if (this.room) await this.ctx.storage.setAlarm(nextAlarm(this.room));
   }
 
   private async init(request: Request): Promise<Response> {
@@ -76,30 +78,34 @@ export class RoomObject extends DurableObject<Env> {
     const token = url.searchParams.get("token") ?? "";
     if (!isToken(token)) return new Response("Bad token", { status: 400 });
     const seated = seat(this.room!, token, newId);
-    if (seated.room !== this.room) await this.save(seated.room);
 
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({ playerId: seated.playerId } satisfies Attachment);
-    this.broadcast();
+    await this.update(seated.room);
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /**
+   * Applies who's online (pausing or resuming the clock), saves if anything
+   * changed, and sends everyone their view. `closing` is a socket on its way out.
+   */
+  private async update(room: RoomData, closing?: WebSocket): Promise<void> {
+    const now = Date.now();
+    const sockets = this.ctx.getWebSockets().filter((ws) => ws !== closing && ws.readyState === WebSocket.OPEN);
+    const online = new Set(sockets.map((ws) => (ws.deserializeAttachment() as Attachment).playerId));
+    const synced = syncPresence(room, online, now);
+    if (synced !== this.room) await this.save(synced);
+    for (const ws of sockets) {
+      const { playerId } = ws.deserializeAttachment() as Attachment;
+      send(ws, { type: "state", state: viewFor(synced, playerId, online, now) });
+    }
   }
 
   private async save(room: RoomData): Promise<void> {
     this.room = room;
     await this.ctx.storage.put(STORAGE_KEY, room);
-    await this.ctx.storage.setAlarm(room.lastActiveAt + ROOM_TTL_MS);
-  }
-
-  /** Sends every open connection its own view. `closing` is left out of who's online. */
-  private broadcast(closing?: WebSocket): void {
-    if (!this.room) return;
-    const sockets = this.ctx.getWebSockets().filter((ws) => ws !== closing && ws.readyState === WebSocket.OPEN);
-    const online = new Set(sockets.map((ws) => (ws.deserializeAttachment() as Attachment).playerId));
-    for (const ws of sockets) {
-      const { playerId } = ws.deserializeAttachment() as Attachment;
-      send(ws, { type: "state", state: viewFor(this.room, playerId, online) });
-    }
+    await this.ctx.storage.setAlarm(nextAlarm(room));
   }
 }
 

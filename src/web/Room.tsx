@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { RULES, TEAMS, type TeamId } from "../rules";
+import { TEAMS, type TeamId } from "../rules";
 import type { ClientMessage, PlayerView, RoomView } from "../shared/protocol";
+import { Finished } from "./Finished";
 import { lastName, rememberName } from "./identity";
+import { TEAM_NAME, TurnScreen } from "./Turn";
 import { useRoom } from "./useRoom";
-
-const TEAM_NAME: Record<TeamId, string> = { green: "Green", black: "Black" };
 
 export function Room({ code, onHome }: { code: string; onHome: () => void }) {
   const { view, connection, error, send } = useRoom(code);
@@ -30,8 +30,10 @@ export function Room({ code, onHome }: { code: string; onHome: () => void }) {
         <p className="meta">Connecting…</p>
       ) : view.phase === "lobby" ? (
         <Lobby view={view} send={send} />
+      ) : view.phase === "playing" && view.turn ? (
+        <TurnScreen view={view} send={send} />
       ) : (
-        <Playing view={view} />
+        <Finished view={view} />
       )}
       {error && (
         <p className="notice" role="alert">
@@ -179,39 +181,5 @@ function PlayerRow({ player, view }: { player: PlayerView; view: RoomView }) {
       {player.id === view.hostId && <span className="chip">Host</span>}
       {!player.connected && <span className="chip dashed">Away</span>}
     </li>
-  );
-}
-
-/** Stand-in until the turn screens land in the next milestone. */
-function Playing({ view }: { view: RoomView }) {
-  const turn = view.turn;
-  return (
-    <section className="panel stack">
-      {turn ? (
-        <>
-          <span className="kicker">
-            Round {turn.round} of {RULES.rounds}
-          </span>
-          <h2>
-            <span className={`dot ${turn.team}`} /> {TEAM_NAME[turn.team]} team's turn
-          </h2>
-          <p>
-            {turn.listenerId === view.you?.id ? "You're the listener this turn." : `${turn.listenerName} is the listener this turn.`}
-          </p>
-        </>
-      ) : (
-        <h2>Game over</h2>
-      )}
-      <div className="scores">
-        {TEAMS.map((t) => (
-          <div key={t} className="score">
-            <span className="big">{view.scores[t]}</span>
-            <span className="label">
-              <span className={`dot ${t}`} /> {TEAM_NAME[t]}
-            </span>
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }

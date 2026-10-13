@@ -1,16 +1,5 @@
-import { expect, test, type Browser, type Page } from "@playwright/test";
-
-/** Each player gets their own browser context, like separate phones. */
-async function newPlayer(browser: Browser): Promise<Page> {
-  const context = await browser.newContext();
-  return context.newPage();
-}
-
-async function joinAs(page: Page, name: string, team: "Green" | "Black") {
-  await page.getByLabel("Your name").fill(name);
-  await page.getByRole("radio", { name: team }).click();
-  await page.getByRole("button", { name: "Join", exact: true }).click();
-}
+import { expect, test, type Page } from "@playwright/test";
+import { joinAs, newPlayer } from "./helpers";
 
 test("four players join from a link, pick teams, and the host starts the game", async ({ browser }) => {
   const host = await newPlayer(browser);
@@ -42,10 +31,10 @@ test("four players join from a link, pick teams, and the host starts the game", 
   await expect(start).toBeEnabled();
   await start.click();
 
-  await expect(host.getByText("You're the listener this turn.")).toBeVisible();
+  await expect(host.getByText("Pick your song")).toBeVisible();
   for (const page of others) {
     await expect(page.getByText("Round 1 of 10")).toBeVisible();
-    await expect(page.getByText("Ann is the listener this turn.")).toBeVisible();
+    await expect(page.getByText("Ann is picking a song.")).toBeVisible();
   }
 });
 

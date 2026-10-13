@@ -98,3 +98,35 @@ p { margin: 0; }
 .big { font-size: 40px; line-height: 1; font-variant-numeric: lining-nums tabular-nums; }
 
 .notice { border: 2px dashed var(--ink); padding: 10px 14px; background: var(--lift); }
+
+.dials { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.dial { border: var(--rule); background: var(--stock); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.dial .big { font-size: 48px; }
+
+.choices { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.choice {
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-body);
+  border: var(--rule);
+  background: var(--stock);
+  color: var(--ink);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+  border-radius: 0;
+}
+.choice:hover { background: var(--lift); }
+.choice.selected { background: var(--ink); color: var(--stock); }
+.choice.selected .meta { color: var(--stock); }
+.song-title { font-size: 20px; font-weight: 400; }
+.big-title { font-size: 30px; line-height: 1.1; }
+.song-card { border-width: 3px; }
+
+.hints { margin: 0; padding-left: 24px; display: flex; flex-direction: column; gap: 6px; font-size: 19px; }
+.hints li { padding-left: 4px; }
+.hints .chip { margin-left: 8px; }
+.button.armed { background: var(--ink); color: var(--stock); }
+.grow { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
