@@ -1,7 +1,8 @@
 /**
  * A whole game: the lobby, listener rotation, the song pool, and turn order
  * (10 rounds, green then black each round). Pure, like turn.ts. The `rng`
- * argument picks songs, so tests can make draws predictable.
+ * argument picks which songs the listener is offered, so tests can make that
+ * predictable.
  */
 import { MIN_SONGS, RULES, TEAMS } from "./config";
 import { RuleError } from "./errors";
@@ -14,7 +15,10 @@ export interface Game {
   hostId: string;
   /** In join order, which is also listener order within each team. */
   players: Player[];
-  /** Songs not drawn yet. A drawn song never comes back, guessed or not. */
+  /**
+   * Songs not played yet. A song leaves when a listener picks it and the
+   * clock starts, guessed or not. Songs offered but not picked stay in.
+   */
   pool: Song[];
   phase: "lobby" | "playing" | "finished";
   /** 0-based position in the 20-turn order. */
@@ -107,20 +111,19 @@ export function winner(game: Game): TeamId | "tie" | null {
 
 // Moves. Each checks who is allowed to make it, then hands off to turn.ts.
 
+export function pickSong(game: Game, byPlayerId: string, songId: string): Game {
+  const turn = currentTurn(game);
+  assertListener(turn, byPlayerId);
+  return { ...game, turn: T.pickSong(turn, songId) };
+}
+
+/** Starting the clock locks in the listener's pick and takes it out of the pool for good. */
 export function startClock(game: Game, byPlayerId: string, now: number): Game {
   const turn = currentTurn(game);
   assertListener(turn, byPlayerId);
-  return { ...game, turn: T.startClock(turn, now) };
-}
-
-export function skipSong(game: Game, byPlayerId: string, rng: Rng = Math.random): Game {
-  const turn = currentTurn(game);
-  assertListener(turn, byPlayerId);
-  // Check the skip rules before drawing so a refused skip doesn't use up a song.
-  T.skipSong(turn, turn.song);
-  if (game.pool.length === 0) throw new RuleError("no-songs-left", "There are no songs left to swap in.");
-  const { song, pool } = draw(game.pool, rng);
-  return { ...game, pool, turn: T.skipSong(turn, song) };
+  const started = T.startClock(turn, now);
+  const pool = game.pool.filter((s) => s.id !== started.song?.id);
+  return { ...game, pool, turn: started };
 }
 
 export function giveHint(game: Game, byPlayerId: string, text: string, now: number): Game {
@@ -183,14 +186,20 @@ function dealTurn(game: Game, rng: Rng): Game {
   const round = roundOf(game.turnNumber);
   const team = teamOf(game.turnNumber);
   const listener = listenerFor(game, team, round);
-  const { song, pool } = draw(game.pool, rng);
-  return { ...game, pool, turn: T.createTurn({ round, team, listenerId: listener.id, song }) };
+  if (game.pool.length === 0) throw new RuleError("no-songs-left", "The playlist has run out of songs.");
+  const choices = sample(game.pool, RULES.songChoices, rng);
+  return { ...game, turn: T.createTurn({ round, team, listenerId: listener.id, choices }) };
 }
 
-function draw(pool: Song[], rng: Rng): { song: Song; pool: Song[] } {
-  if (pool.length === 0) throw new RuleError("no-songs-left", "The playlist has run out of songs.");
-  const i = Math.min(Math.floor(rng() * pool.length), pool.length - 1);
-  return { song: pool[i]!, pool: [...pool.slice(0, i), ...pool.slice(i + 1)] };
+/** Up to `n` different songs from the pool, at random. */
+function sample(pool: Song[], n: number, rng: Rng): Song[] {
+  const left = [...pool];
+  const picked: Song[] = [];
+  while (picked.length < n && left.length > 0) {
+    const i = Math.min(Math.floor(rng() * left.length), left.length - 1);
+    picked.push(left.splice(i, 1)[0]!);
+  }
+  return picked;
 }
 
 function currentTurn(game: Game): Turn {

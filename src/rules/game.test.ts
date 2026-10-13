@@ -27,6 +27,12 @@ function lobby(players = PLAYERS, pool = songs): Game {
   return players.reduce((g, p) => G.join(g, p), G.createGame("ann", pool));
 }
 
+/** The listener picks the first song offered and starts the clock. */
+function play(g: Game, now = T0): Game {
+  const turn = g.turn!;
+  return G.startClock(G.pickSong(g, turn.listenerId, turn.choices[0]!.id), turn.listenerId, now);
+}
+
 function code(fn: () => unknown): string | undefined {
   try {
     fn();
@@ -73,58 +79,66 @@ describe("turn order and listeners", () => {
     expect(g.phase).toBe("finished");
   });
 
-  it("removes every drawn song from the pool, guessed or not", () => {
+  it("removes a song once it's played, guessed or not, and keeps the ones passed over", () => {
     let g = G.start(lobby(), "ann", first);
-    const firstSong = g.turn!.song.id;
-    expect(g.pool.map((s) => s.id)).not.toContain(firstSong);
+    expect(g.pool).toHaveLength(songs.length);
+    g = play(g);
+    const played = g.turn!.song!.id;
+    expect(g.pool.map((s) => s.id)).not.toContain(played);
+    expect(g.pool).toHaveLength(songs.length - 1);
     g = G.nextTurn(G.voidTurn(g, "ann", T0), first);
-    expect(g.pool).toHaveLength(songs.length - 2);
+    expect(g.turn!.choices.map((s) => s.id)).not.toContain(played);
   });
 });
 
 describe("who can do what", () => {
-  it("only the listener hints, reveals and starts the clock", () => {
+  it("only the listener picks, starts the clock, hints and reveals", () => {
     const g = G.start(lobby(), "ann", first);
-    expect(code(() => G.startClock(g, "cy", T0))).toBe("not-listener");
-    const live = G.startClock(g, "ann", T0);
+    expect(code(() => G.pickSong(g, "cy", g.turn!.choices[0]!.id))).toBe("not-listener");
+    const picked = G.pickSong(g, "ann", g.turn!.choices[0]!.id);
+    expect(code(() => G.startClock(picked, "cy", T0))).toBe("not-listener");
+    const live = G.startClock(picked, "ann", T0);
     expect(code(() => G.giveHint(live, "cy", "hi", T0))).toBe("not-listener");
     expect(code(() => G.reveal(live, "bo", "artist", T0))).toBe("not-listener");
   });
 
   it("only the listener's teammates can guess", () => {
-    const g = G.startClock(G.start(lobby(), "ann", first), "ann", T0);
+    const g = play(G.start(lobby(), "ann", first));
     expect(code(() => G.guess(g, "ann", "x", T0))).toBe("not-guesser");
     expect(code(() => G.guess(g, "bo", "x", T0))).toBe("not-guesser");
     expect(G.guess(g, "cy", "x", T0).turn!.guesses).toHaveLength(1);
   });
 });
 
-describe("skips", () => {
-  it("swaps in a new song and uses up the old one", () => {
-    const g = G.start(lobby(), "ann", first);
-    const before = g.turn!.song.id;
-    const s = G.skipSong(g, "ann", first);
-    expect(s.turn!.song.id).not.toBe(before);
-    expect(s.pool).toHaveLength(g.pool.length - 1);
-    expect(code(() => G.skipSong(s, "ann", first))).toBe("no-skips-left");
+describe("song choices", () => {
+  it("offers the listener 5 different songs from the pool", () => {
+    const g = G.start(lobby(), "ann", Math.random);
+    const ids = g.turn!.choices.map((s) => s.id);
+    expect(ids).toHaveLength(5);
+    expect(new Set(ids).size).toBe(5);
+    for (const id of ids) expect(g.pool.map((s) => s.id)).toContain(id);
+  });
+
+  it("offers whatever is left when fewer than 5 songs remain", () => {
+    let g = G.start(lobby(PLAYERS, songs.slice(0, 20)), "ann", first);
+    while (g.turnNumber < 18) g = G.nextTurn(G.voidTurn(play(g), "ann", T0), first);
+    expect(g.turn!.choices).toHaveLength(2);
   });
 });
 
 describe("scoring a game", () => {
   it("adds banked points to the team that earned them", () => {
-    let g = G.start(lobby(), "ann", first);
-    g = G.startClock(g, "ann", T0);
-    g = G.guess(g, "cy", g.turn!.song.title, T0 + 30_000);
+    let g = play(G.start(lobby(), "ann", first));
+    g = G.guess(g, "cy", g.turn!.song!.title, T0 + 30_000);
     expect(G.scores(g)).toEqual({ green: 95, black: 0 });
-    g = G.nextTurn(g, first);
-    g = G.startClock(g, "bo", T0);
+    g = play(G.nextTurn(g, first));
     g = G.tick(g, T0 + 180_000);
     expect(g.turn!.result?.reason).toBe("time");
     expect(G.scores(G.nextTurn(g, first))).toEqual({ green: 95, black: 0 });
   });
 
   it("won't move on until the turn is over", () => {
-    const g = G.startClock(G.start(lobby(), "ann", first), "ann", T0);
+    const g = play(G.start(lobby(), "ann", first));
     expect(code(() => G.nextTurn(g, first))).toBe("turn-not-running");
   });
 });

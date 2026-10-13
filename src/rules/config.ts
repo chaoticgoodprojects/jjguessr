@@ -11,8 +11,8 @@ export const RULES = {
   wrongGuessCost: 20,
   revealCost: 50,
   minPlayersPerTeam: 2,
-  /** Songs the listener may swap out before the clock starts. */
-  skipsPerTurn: 1,
+  /** Songs from the pool the listener chooses between each turn. */
+  songChoices: 5,
 } as const;
 
 export const TEAMS = ["green", "black"] as const;

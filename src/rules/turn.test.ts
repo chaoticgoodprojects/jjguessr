@@ -10,8 +10,12 @@ const T0 = 1_000_000;
 /** Wall clock `secs` seconds after the clock started. */
 const at = (secs: number) => T0 + secs * 1000;
 
+function ready(choices: Song[] = [SONG, SELF_TITLED]): Turn {
+  return T.createTurn({ round: 1, team: "green", listenerId: "lis", choices });
+}
+
 function running(song: Song = SONG): Turn {
-  return T.startClock(T.createTurn({ round: 1, team: "green", listenerId: "lis", song }), T0);
+  return T.startClock(T.pickSong(ready(), song.id), T0);
 }
 
 function code(fn: () => unknown): string | undefined {
@@ -35,7 +39,7 @@ describe("starting points and the clock", () => {
   });
 
   it("does not run before the listener starts the clock", () => {
-    const t = T.createTurn({ round: 1, team: "green", listenerId: "lis", song: SONG });
+    const t = T.pickSong(ready(), SONG.id);
     expect(T.elapsed(t, at(100))).toBe(0);
     expect(T.pointsLeft(t, at(100))).toBe(100);
     expect(code(() => T.guess(t, "p", "anything", at(1)))).toBe("turn-not-running");
@@ -174,15 +178,26 @@ describe("count it", () => {
   });
 });
 
-describe("skip and void", () => {
-  it("allows one skip, only before the clock starts", () => {
-    const ready = T.createTurn({ round: 1, team: "green", listenerId: "lis", song: SONG });
-    const skipped = T.skipSong(ready, SELF_TITLED);
-    expect(skipped.song).toBe(SELF_TITLED);
-    expect(code(() => T.skipSong(skipped, SONG))).toBe("no-skips-left");
-    expect(code(() => T.skipSong(running(), SONG))).toBe("turn-not-ready");
+describe("picking the song", () => {
+  it("lets the listener pick one of the choices and change their mind until the clock starts", () => {
+    let t = T.pickSong(ready(), SONG.id);
+    expect(t.song).toBe(SONG);
+    t = T.pickSong(t, SELF_TITLED.id);
+    expect(t.song).toBe(SELF_TITLED);
+    t = T.startClock(t, T0);
+    expect(code(() => T.pickSong(t, SONG.id))).toBe("turn-not-ready");
   });
 
+  it("only accepts songs that were offered", () => {
+    expect(code(() => T.pickSong(ready([SONG]), SELF_TITLED.id))).toBe("not-a-choice");
+  });
+
+  it("won't start the clock without a pick", () => {
+    expect(code(() => T.startClock(ready(), T0))).toBe("no-song-picked");
+  });
+});
+
+describe("void", () => {
   it("voids a turn to 0 points", () => {
     expect(T.voidTurn(running(), at(50)).result).toEqual({ reason: "voided", points: 0, at: 50 });
   });

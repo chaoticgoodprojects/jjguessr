@@ -57,7 +57,10 @@ export interface Turn {
   round: number;
   team: TeamId;
   listenerId: string;
-  song: Song;
+  /** Songs offered to the listener for this turn. */
+  choices: Song[];
+  /** The listener's pick. Can change until the clock starts. */
+  song: Song | null;
   phase: "ready" | "running" | "over";
   /** Wall clock (ms) when the clock started. */
   startedAt: number | null;
@@ -65,7 +68,6 @@ export interface Turn {
   pausedAt: number | null;
   /** Total ms spent paused before the current pause. */
   pausedMs: number;
-  skipsUsed: number;
   /** Next sequence number for a hint, guess or reveal. */
   seq: number;
   hints: Hint[];

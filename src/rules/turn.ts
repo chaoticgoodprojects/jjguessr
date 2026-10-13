@@ -13,14 +13,14 @@ import type { Guess, RevealKind, Song, TeamId, Turn, TurnEndReason, TurnSeconds 
 const MAX_TEXT = 200;
 const MAX_TIME_PENALTY = Math.floor(RULES.turnSeconds / RULES.secondsPerPoint);
 
-export function createTurn(init: { round: number; team: TeamId; listenerId: string; song: Song }): Turn {
+export function createTurn(init: { round: number; team: TeamId; listenerId: string; choices: Song[] }): Turn {
   return {
     ...init,
+    song: null,
     phase: "ready",
     startedAt: null,
     pausedAt: null,
     pausedMs: 0,
-    skipsUsed: 0,
     seq: 0,
     hints: [],
     guesses: [],
@@ -73,20 +73,22 @@ export function freeHintsLeft(turn: Turn): number {
 /** Whether the listener may still reveal, and why not if they can't. */
 export function canReveal(turn: Turn): { ok: true } | { ok: false; reason: "already-revealed" | "self-titled" } {
   if (turn.reveal) return { ok: false, reason: "already-revealed" };
-  if (isSelfTitled(turn.song.artist, turn.song.album)) return { ok: false, reason: "self-titled" };
+  if (turn.song && isSelfTitled(turn.song.artist, turn.song.album)) return { ok: false, reason: "self-titled" };
   return { ok: true };
+}
+
+/** The listener chooses this turn's song from the choices offered. They can change their mind until the clock starts. */
+export function pickSong(turn: Turn, songId: string): Turn {
+  if (turn.phase !== "ready") throw new RuleError("turn-not-ready", "The song is locked once the clock starts.");
+  const song = turn.choices.find((s) => s.id === songId);
+  if (!song) throw new RuleError("not-a-choice", "That song isn't one of this turn's choices.");
+  return { ...turn, song };
 }
 
 export function startClock(turn: Turn, now: number): Turn {
   if (turn.phase !== "ready") throw new RuleError("turn-not-ready", "This turn has already started.");
+  if (!turn.song) throw new RuleError("no-song-picked", "Pick a song first.");
   return { ...turn, phase: "running", startedAt: now };
-}
-
-/** Before the clock starts, the listener can swap a song they don't know for a new one. */
-export function skipSong(turn: Turn, replacement: Song): Turn {
-  if (turn.phase !== "ready") throw new RuleError("turn-not-ready", "Songs can only be skipped before the clock starts.");
-  if (turn.skipsUsed >= RULES.skipsPerTurn) throw new RuleError("no-skips-left", "No skips left this turn.");
-  return { ...turn, song: replacement, skipsUsed: turn.skipsUsed + 1 };
 }
 
 /** Freezes the clock, for example while the listener reconnects. */
@@ -118,7 +120,8 @@ export function reveal(turn: Turn, kind: RevealKind, now: number): Turn {
       ? new RuleError("self-titled", "This song is on a self-titled album, so neither the artist nor the album can be revealed.")
       : new RuleError("already-revealed", "The artist or album has already been revealed this turn.");
   }
-  const value = kind === "artist" ? t.song.artist : t.song.album;
+  const song = pickedSong(t);
+  const value = kind === "artist" ? song.artist : song.album;
   const r = { seq: t.seq, kind, value, at: elapsed(t, now) };
   return endIfNoPoints({ ...t, seq: t.seq + 1, reveal: r }, now);
 }
@@ -128,7 +131,7 @@ export function guess(turn: Turn, playerId: string, text: string, now: number): 
   assertLive(t);
   const clean = cleanText(text);
   const at = elapsed(t, now);
-  const correct = titleMatches(clean, t.song.title);
+  const correct = titleMatches(clean, pickedSong(t).title);
   const g: Guess = { seq: t.seq, playerId, text: clean, at, correct, counted: false };
   const next = { ...t, seq: t.seq + 1, guesses: [...t.guesses, g] };
   if (correct) return end(next, "guessed", pointsLeft(t, now), at);
@@ -183,6 +186,12 @@ function assertRunning(turn: Turn): void {
 function assertLive(turn: Turn): void {
   assertRunning(turn);
   if (turn.pausedAt !== null) throw new RuleError("paused", "The clock is paused.");
+}
+
+/** A running turn always has a song: startClock refuses without one. */
+function pickedSong(turn: Turn): Song {
+  if (!turn.song) throw new RuleError("no-song-picked", "Pick a song first.");
+  return turn.song;
 }
 
 function cleanText(text: string): string {

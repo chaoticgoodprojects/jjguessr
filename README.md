@@ -6,7 +6,7 @@ A two-team song guessing game to play with family and friends over a group call 
 
 - Two teams, green and black. Players join from a game link, put a name down and pick a team.
 - 10 rounds. Each round, each team gets one turn with a song drawn from the game's playlist.
-- One player per team per round is the listener (picked automatically, rotating in join order). Only they see the song, and they type hints for their teammates.
+- One player per team per round is the listener (picked automatically, rotating in join order). They choose the song from 5 offered at random from the playlist. Only they see it, and they type hints for their teammates.
 - A turn lasts 3 minutes and starts at 100 points. The team banks whatever is left when they guess the title.
 
 | What happens | Points |
