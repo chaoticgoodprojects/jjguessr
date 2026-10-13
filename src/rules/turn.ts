@@ -38,6 +38,12 @@ export function elapsed(turn: Turn, now: number): TurnSeconds {
   return Math.min(Math.max(secs, 0), RULES.turnSeconds);
 }
 
+/** Wall clock (ms) when time runs out, or null while the clock isn't running. */
+export function endsAt(turn: Turn): number | null {
+  if (turn.phase !== "running" || turn.startedAt === null || turn.pausedAt !== null) return null;
+  return turn.startedAt + turn.pausedMs + RULES.turnSeconds * 1000;
+}
+
 export function secondsLeft(turn: Turn, now: number): TurnSeconds {
   return RULES.turnSeconds - elapsed(turn, now);
 }
