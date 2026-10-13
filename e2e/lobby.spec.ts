@@ -55,3 +55,15 @@ test("a wrong code says the game doesn't exist", async ({ page }) => {
   await page.goto("/r/ZZZZ");
   await expect(page.getByText("No game with that code")).toBeVisible();
 });
+
+test("a game can be created from a plain http page, where browsers hide crypto.randomUUID", async ({ browser }) => {
+  const host = await newPlayer(browser);
+  await host.addInitScript(() => {
+    Object.defineProperty(crypto, "randomUUID", { value: undefined });
+  });
+  await host.goto("/");
+  await host.getByRole("button", { name: "Create a game" }).click();
+  await expect(host).toHaveURL(/\/r\/[A-Z]{4}$/);
+  await joinAs(host, "Ann", "Green");
+  await expect(host.locator('[data-team="green"]').getByText("Ann")).toBeVisible();
+});

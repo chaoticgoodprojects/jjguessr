@@ -27,10 +27,15 @@ function write(key: string, value: string): void {
 export function seatToken(): string {
   let token = read(TOKEN_KEY);
   if (!token) {
-    token = crypto.randomUUID();
+    token = newToken();
     write(TOKEN_KEY, token);
   }
   return token;
+}
+
+/** 32 random hex digits. Not crypto.randomUUID, which browsers only offer on https pages. */
+function newToken(): string {
+  return [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 export function lastName(): string {
