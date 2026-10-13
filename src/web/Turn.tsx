@@ -1,9 +1,9 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { RULES, TEAMS, type Song, type TeamId } from "../rules";
+import { useEffect, useState, type FormEvent } from "react";
+import { RULES, TEAMS, type Song } from "../rules";
 import type { ClientMessage, RoomView, TurnView } from "../shared/protocol";
+import { ConfirmButton, TEAM_NAME } from "./common";
+import { JoinForm, Players } from "./Players";
 import { formatClock, useClock } from "./useClock";
-
-export const TEAM_NAME: Record<TeamId, string> = { green: "Green", black: "Black" };
 
 type Send = (m: ClientMessage) => void;
 
@@ -15,6 +15,7 @@ export function TurnScreen({ view, send }: { view: RoomView; send: Send }) {
 
   return (
     <>
+      {!view.you && <JoinForm view={view} send={send} />}
       <section className="panel stack" aria-label="This turn">
         <span className="kicker">
           Round {turn.round} of {RULES.rounds}
@@ -50,7 +51,9 @@ export function TurnScreen({ view, send }: { view: RoomView; send: Send }) {
 
       {started && listening && turn.song && turn.phase === "running" && <SongCard song={turn.song} />}
       {turn.phase === "over" && <TurnResult view={view} send={send} />}
-      {turn.phase === "running" && listening && <ListenerControls turn={turn} send={send} />}
+      {turn.phase === "running" && listening && (
+        <ListenerControls turn={turn} elapsed={RULES.turnSeconds - secondsLeft} send={send} />
+      )}
       {started && <Hints turn={turn} />}
       {turn.phase === "running" && turn.role === "guesser" && <GuessBox send={send} />}
       {started && <Guesses turn={turn} send={send} />}
@@ -65,6 +68,7 @@ export function TurnScreen({ view, send }: { view: RoomView; send: Send }) {
       )}
 
       <Scores view={view} />
+      <Players view={view} send={send} />
     </>
   );
 }
@@ -125,10 +129,11 @@ function SongCard({ song }: { song: Song }) {
   );
 }
 
-function ListenerControls({ turn, send }: { turn: TurnView; send: Send }) {
+function ListenerControls({ turn, elapsed, send }: { turn: TurnView; elapsed: number; send: Send }) {
   const [text, setText] = useState("");
   const [armed, setArmed] = useState(false);
   const cost = turn.nextHintCost;
+  const revealWait = RULES.revealAfterSeconds - elapsed;
 
   useEffect(() => {
     if (!armed) return;
@@ -170,7 +175,7 @@ function ListenerControls({ turn, send }: { turn: TurnView; send: Send }) {
             <ConfirmButton
               key={kind}
               className="button"
-              disabled={turn.revealBlocker !== null || (kind === "album" && !turn.albumKnown)}
+              disabled={turn.revealBlocker !== null || revealWait > 0 || (kind === "album" && !turn.albumKnown)}
               confirmLabel={`Tap again: −${RULES.revealCost}`}
               onConfirm={() => send({ type: "reveal", kind })}
             >
@@ -180,6 +185,11 @@ function ListenerControls({ turn, send }: { turn: TurnView; send: Send }) {
         </div>
         {turn.revealBlocker === "self-titled" && <span className="meta">Self-titled album, so no reveal this turn.</span>}
         {turn.revealBlocker === "already-revealed" && <span className="meta">Already revealed this turn.</span>}
+        {turn.revealBlocker === null && revealWait > 0 && (
+          <span className="meta" data-testid="reveal-wait">
+            Reveals unlock in {formatClock(revealWait)}
+          </span>
+        )}
         {turn.revealBlocker === null && !turn.albumKnown && (
           <span className="meta">This playlist doesn't list albums, so only the artist can be revealed.</span>
         )}
@@ -301,34 +311,5 @@ export function Scores({ view }: { view: RoomView }) {
         </div>
       ))}
     </section>
-  );
-}
-
-/** A button that needs a second tap within a few seconds, for moves that cost points. */
-function ConfirmButton(props: {
-  children: ReactNode;
-  confirmLabel: string;
-  onConfirm: () => void;
-  className: string;
-  disabled?: boolean;
-}) {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    if (!armed) return;
-    const t = setTimeout(() => setArmed(false), 4000);
-    return () => clearTimeout(t);
-  }, [armed]);
-  return (
-    <button
-      className={`${props.className} ${armed ? "armed" : ""}`}
-      disabled={props.disabled}
-      onClick={() => {
-        if (!armed) return setArmed(true);
-        setArmed(false);
-        props.onConfirm();
-      }}
-    >
-      {armed ? props.confirmLabel : props.children}
-    </button>
   );
 }

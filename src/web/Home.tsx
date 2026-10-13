@@ -11,16 +11,9 @@ export function Home({ onOpenGame }: { onOpenGame: (code: string) => void }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/rooms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: seatToken() }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const { code } = (await res.json()) as { code: string };
-      onOpenGame(code);
-    } catch {
-      setError("Couldn't create a game. Check your connection and try again.");
+      onOpenGame(await createGame());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't create a game. Try again.");
       setBusy(false);
     }
   };
@@ -35,7 +28,6 @@ export function Home({ onOpenGame }: { onOpenGame: (code: string) => void }) {
   return (
     <main className="page">
       <header className="masthead panel">
-        <span className="kicker">Chaotic Good Projects</span>
         <h1>jjguessr</h1>
         <span className="meta">Two teams · 10 rounds · Name that song</span>
       </header>
@@ -76,4 +68,26 @@ export function Home({ onOpenGame }: { onOpenGame: (code: string) => void }) {
       )}
     </main>
   );
+}
+
+/** Asks the server for a new game. Errors say what went wrong, so a screenshot is enough to fix it. */
+async function createGame(): Promise<string> {
+  const res = await fetch("/api/rooms", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: seatToken() }),
+  }).catch(() => null);
+  if (!res) throw new Error("Couldn't reach the game server. Check your connection and try again.");
+  const text = await res.text().catch(() => "");
+  if (!res.ok) throw new Error(`Couldn't create a game (server said ${res.status}${text ? `: ${text.slice(0, 120)}` : ""}).`);
+  let code: unknown = null;
+  try {
+    code = (JSON.parse(text) as { code?: unknown }).code;
+  } catch {
+    // Not JSON, most likely a web page; reported below.
+  }
+  if (typeof code !== "string" || !isRoomCode(code)) {
+    throw new Error("Couldn't create a game (the server sent something other than a game code).");
+  }
+  return code;
 }

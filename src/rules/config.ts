@@ -10,6 +10,8 @@ export const RULES = {
   extraHintCost: 50,
   wrongGuessCost: 20,
   revealCost: 50,
+  /** The artist or album can't be revealed until this far into the turn. */
+  revealAfterSeconds: 120,
   minPlayersPerTeam: 2,
   /** Songs from the pool the listener chooses between each turn. */
   songChoices: 5,

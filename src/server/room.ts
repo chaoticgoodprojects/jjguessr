@@ -64,8 +64,11 @@ export function seat(room: RoomData, token: string, newId: IdGen): { room: RoomD
 
 export type HandleResult = { ok: true; room: RoomData } | { ok: false; message: string };
 
-/** A move that needs a fetch first (reading a pasted playlist) is handled by `useSongs` instead. */
-export type SyncMessage = Exclude<ClientMessage, { type: "usePlaylist" }>;
+/**
+ * Moves handled here. Reading a pasted playlist needs a fetch first (`useSongs`),
+ * and rejoining needs the seat token and who's online (`rejoin`).
+ */
+export type SyncMessage = Exclude<ClientMessage, { type: "usePlaylist" } | { type: "rejoin" }>;
 
 export function handle(room: RoomData, playerId: string, msg: SyncMessage, now: number, rng: Rng = Math.random): HandleResult {
   return attempt(() => {
@@ -101,6 +104,10 @@ function apply(game: Game, playerId: string, msg: Exclude<SyncMessage, { type: "
   switch (msg.type) {
     case "join":
       return G.join(game, { id: playerId, name: msg.name, team: msg.team });
+    case "move":
+      return G.movePlayer(game, playerId, msg.playerId, msg.team);
+    case "remove":
+      return G.removePlayer(game, playerId, msg.playerId);
     case "start":
       return G.start(game, playerId, rng);
     case "pick":
@@ -123,6 +130,34 @@ function apply(game: Game, playerId: string, msg: Exclude<SyncMessage, { type: "
       }
       return G.nextTurn(game, rng);
   }
+}
+
+export type Seated = { ok: true; room: RoomData; playerId: string } | { ok: false; message: string };
+
+/**
+ * The player someone is coming back as when they type a name that's already
+ * in the game and that player is away. Null for a new name, or for someone
+ * who has already joined.
+ */
+export function returningPlayer(room: RoomData, playerId: string, name: string, online: ReadonlySet<string>): string | null {
+  if (room.game.players.some((p) => p.id === playerId)) return null;
+  const namesake = G.findByName(room.game, name);
+  return namesake && !online.has(namesake.id) ? namesake.id : null;
+}
+
+/**
+ * Hands an away player's seat to this browser, for someone whose browser
+ * forgot them (cleared storage, a different browser app on the same phone).
+ */
+export function rejoin(room: RoomData, token: string, playerId: string, targetId: string, online: ReadonlySet<string>): Seated {
+  const target = room.game.players.find((p) => p.id === targetId);
+  if (!target) return { ok: false, message: "That player isn't in this game." };
+  const me = room.game.players.find((p) => p.id === playerId);
+  if (me) return { ok: false, message: `You're already playing as ${me.name}.` };
+  if (online.has(targetId)) {
+    return { ok: false, message: `${target.name} is connected on another screen. Close the game there first.` };
+  }
+  return { ok: true, room: { ...room, seats: { ...room.seats, [token]: targetId } }, playerId: targetId };
 }
 
 /**

@@ -48,9 +48,13 @@ function uniqueSongs(songs: Song[]): Song[] {
 
 /** Joining, or changing name or team while still in the lobby. Late joiners join the rotation. */
 export function join(game: Game, player: Player): Game {
-  const name = player.name.trim().replace(/\s+/g, " ");
+  const name = cleanName(player.name);
   if (!name) throw new RuleError("empty-text", "Put a name down to join.");
   if (name.length > MAX_NAME) throw new RuleError("text-too-long", `Names can be up to ${MAX_NAME} characters.`);
+  const namesake = findByName(game, name);
+  if (namesake && namesake.id !== player.id) {
+    throw new RuleError("name-taken", `Someone here is already called ${namesake.name}. Try adding an initial.`);
+  }
   const existing = game.players.find((p) => p.id === player.id);
   if (existing && existing.team !== player.team && game.phase !== "lobby") {
     throw new RuleError("game-already-started", "Teams are locked once the game starts.");
@@ -64,6 +68,50 @@ export function join(game: Game, player: Player): Game {
 
 export function leave(game: Game, playerId: string): Game {
   return { ...game, players: game.players.filter((p) => p.id !== playerId) };
+}
+
+function cleanName(name: string): string {
+  return name.trim().replace(/\s+/g, " ");
+}
+
+/** The player with this name, ignoring case and spacing. Names are unique within a game. */
+export function findByName(game: Game, name: string): Player | undefined {
+  const key = cleanName(name).toLowerCase();
+  return game.players.find((p) => p.name.toLowerCase() === key);
+}
+
+/** The host moves a player to the other team, before or during the game. */
+export function movePlayer(game: Game, byPlayerId: string, playerId: string, team: TeamId): Game {
+  const player = assertCanRearrange(game, byPlayerId, playerId);
+  if (player.team === team) return game;
+  return { ...game, players: game.players.map((p) => (p.id === playerId ? { ...p, team } : p)) };
+}
+
+/** The host takes a player out of the game, before or during it. */
+export function removePlayer(game: Game, byPlayerId: string, playerId: string): Game {
+  if (playerId === game.hostId) throw new RuleError("cant-remove-host", "The host can't be removed.");
+  assertCanRearrange(game, byPlayerId, playerId);
+  return leave(game, playerId);
+}
+
+/**
+ * Checks shared by moving and removing. Once the game is on, a turn's listener
+ * stays put until their turn ends, and both teams keep enough players to play.
+ */
+function assertCanRearrange(game: Game, byPlayerId: string, playerId: string): Player {
+  assertHost(game, byPlayerId);
+  const player = game.players.find((p) => p.id === playerId);
+  if (!player) throw new RuleError("unknown-player", "That player isn't in this game.");
+  if (game.phase === "finished") throw new RuleError("game-over", "The game is over.");
+  if (game.phase === "playing") {
+    if (game.turn && game.turn.listenerId === playerId && game.turn.phase !== "over") {
+      throw new RuleError("listener-busy", `${player.name} is the listener right now. Wait until this turn ends.`);
+    }
+    if (teamMembers(game, player.team).length <= RULES.minPlayersPerTeam) {
+      throw new RuleError("not-enough-players", `Each team needs at least ${RULES.minPlayersPerTeam} players during the game.`);
+    }
+  }
+  return player;
 }
 
 export function teamMembers(game: Game, team: TeamId): Player[] {

@@ -151,3 +151,52 @@ describe("changing the songs", () => {
     expect(code(() => G.setSongs(G.start(g, "ann", first), "ann", songs))).toBe("game-already-started");
   });
 });
+
+describe("names", () => {
+  it("keeps names unique, ignoring case and spacing", () => {
+    const g = lobby();
+    expect(code(() => G.join(g, { id: "x", name: " ann ", team: "black" }))).toBe("name-taken");
+    expect(G.findByName(g, "  CY ")?.id).toBe("cy");
+    // Re-sending your own name (to switch teams) is fine.
+    expect(G.join(g, { id: "ann", name: "Ann", team: "black" }).players.find((p) => p.id === "ann")?.team).toBe("black");
+  });
+});
+
+describe("the host rearranging players", () => {
+  it("moves and removes anyone in the lobby", () => {
+    let g = G.movePlayer(lobby(), "ann", "bo", "green");
+    expect(G.teamMembers(g, "green").map((p) => p.id)).toEqual(["ann", "bo", "cy", "ed"]);
+    g = G.removePlayer(g, "ann", "ed");
+    expect(g.players.map((p) => p.id)).toEqual(["ann", "bo", "cy", "di"]);
+  });
+
+  it("is host only, and the host stays in", () => {
+    expect(code(() => G.movePlayer(lobby(), "bo", "di", "green"))).toBe("not-host");
+    expect(code(() => G.removePlayer(lobby(), "bo", "di"))).toBe("not-host");
+    expect(code(() => G.removePlayer(lobby(), "ann", "ann"))).toBe("cant-remove-host");
+    expect(code(() => G.removePlayer(lobby(), "ann", "zed"))).toBe("unknown-player");
+  });
+
+  it("during the game, leaves the current listener alone until their turn ends", () => {
+    const g = G.start(lobby(), "ann", first); // Ann listens first
+    expect(code(() => G.movePlayer(g, "ann", "ann", "black"))).toBe("listener-busy");
+    const over = G.voidTurn(play(g), "ann", T0 + 1000);
+    expect(G.movePlayer(over, "ann", "ann", "black").players.find((p) => p.id === "ann")?.team).toBe("black");
+  });
+
+  it("during the game, keeps at least 2 players on each team", () => {
+    const g = G.start(lobby(), "ann", first); // green: Ann, Cy, Ed; black: Bo, Di
+    expect(code(() => G.removePlayer(g, "ann", "di"))).toBe("not-enough-players");
+    expect(code(() => G.movePlayer(g, "ann", "bo", "green"))).toBe("not-enough-players");
+    const moved = G.movePlayer(g, "ann", "ed", "black");
+    expect(G.teamMembers(moved, "black").map((p) => p.id)).toEqual(["bo", "di", "ed"]);
+    expect(G.removePlayer(moved, "ann", "di").players.some((p) => p.id === "di")).toBe(false);
+  });
+
+  it("picks future listeners from the teams as they are now", () => {
+    let g = G.start(lobby(), "ann", first);
+    g = G.movePlayer(g, "ann", "cy", "black"); // green: Ann, Ed; black in join order: Bo, Cy, Di
+    while (g.turnNumber < 3) g = G.nextTurn(G.voidTurn(play(g), "ann", T0 + 1000), first);
+    expect(g.turn).toMatchObject({ round: 2, team: "black", listenerId: "cy" }); // Di's turn before the move
+  });
+});

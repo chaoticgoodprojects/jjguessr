@@ -6,7 +6,15 @@ export async function newPlayer(browser: Browser): Promise<Page> {
   return context.newPage();
 }
 
+/** The rules pop up the first time a browser opens a game. */
+export async function dismissRules(page: Page) {
+  await page.getByRole("button", { name: "Got it" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+}
+
+/** Closes the rules, then joins. For a browser opening this game for the first time. */
 export async function joinAs(page: Page, name: string, team: "Green" | "Black") {
+  await dismissRules(page);
   await page.getByLabel("Your name").fill(name);
   await page.getByRole("radio", { name: team }).click();
   await page.getByRole("button", { name: "Join", exact: true }).click();

@@ -7,6 +7,11 @@ import type { RevealKind, Song, TeamId, TurnEndReason } from "../rules";
 
 export type ClientMessage =
   | { type: "join"; name: string; team: TeamId }
+  /** Take back your old seat, for someone whose browser forgot them. */
+  | { type: "rejoin"; playerId: string }
+  /** Host only: move a player to a team, or take them out of the game. */
+  | { type: "move"; playerId: string; team: TeamId }
+  | { type: "remove"; playerId: string }
   | { type: "start" }
   | { type: "usePack"; packId: string }
   | { type: "usePlaylist"; link: string }
@@ -128,6 +133,13 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     case "join":
       return typeof o.name === "string" && (o.team === "green" || o.team === "black")
         ? { type: "join", name: o.name, team: o.team }
+        : null;
+    case "rejoin":
+    case "remove":
+      return typeof o.playerId === "string" ? { type: o.type, playerId: o.playerId } : null;
+    case "move":
+      return typeof o.playerId === "string" && (o.team === "green" || o.team === "black")
+        ? { type: "move", playerId: o.playerId, team: o.team }
         : null;
     case "pick":
       return typeof o.songId === "string" ? { type: "pick", songId: o.songId } : null;

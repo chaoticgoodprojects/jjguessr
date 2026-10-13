@@ -9,6 +9,10 @@ test("a turn: the listener hints, a teammate guesses, everyone sees the score", 
   const title = await pickAndStart(ann);
   for (const page of [bo, cy, di]) await expect(page.getByText(title)).toHaveCount(0);
 
+  // Everyone sees both teams, green on the left, with the listener marked.
+  const green = bo.getByRole("region", { name: "Players" }).locator('[data-team="green"]');
+  await expect(green.getByRole("listitem").filter({ hasText: "Ann" })).toContainText("Listener");
+
   await ann.getByLabel("Your hint").fill("a big singalong");
   await ann.getByRole("button", { name: "Send hint" }).click();
   for (const page of [bo, cy, di]) await expect(page.getByText("a big singalong")).toBeVisible();
@@ -46,28 +50,27 @@ test("the listener can count a guess the app rejected", async ({ browser }) => {
   await expect(cy.getByRole("heading", { name: /Got it! \+\d+/ })).toBeVisible();
 });
 
-test("reveals and extra hints ask for a second tap", async ({ browser }) => {
+test("reveals wait two minutes, and extra hints ask for a second tap", async ({ browser }) => {
   const { ann, cy } = await startFourPlayerGame(browser);
   await pickAndStart(ann);
 
-  const reveal = ann.getByRole("button", { name: "Reveal artist" });
-  await reveal.click();
-  await expect(ann.getByRole("button", { name: "Tap again: −50" }).first()).toBeVisible();
-  await ann.getByRole("button", { name: "Tap again: −50" }).first().click();
-  await expect(cy.getByText("artist", { exact: true })).toBeVisible();
-  await expect(ann.getByText("Already revealed this turn.")).toBeVisible();
-  await expect(cy.getByTestId("points")).toHaveText(/^[45]\d$/);
+  await expect(ann.getByRole("button", { name: "Reveal artist" })).toBeDisabled();
+  await expect(ann.getByTestId("reveal-wait")).toHaveText(/^Reveals unlock in (2:00|1:5\d)$/);
 
   for (const hint of ["one", "two", "three"]) {
     await ann.getByLabel("Your hint").fill(hint);
     await ann.getByRole("button", { name: "Send hint" }).click();
     await expect(cy.getByText(hint, { exact: true })).toBeVisible();
   }
-  await ann.getByLabel("Your hint").fill("four");
-  await ann.getByRole("button", { name: "Send hint" }).click();
-  await expect(cy.getByText("four", { exact: true })).toHaveCount(0);
-  await ann.getByRole("button", { name: "Send for −50" }).click();
-  // 100 − 50 reveal − 50 hint leaves nothing, so the turn ends.
+  const hints = cy.getByRole("region", { name: "Hints" }).getByRole("listitem");
+  for (const hint of ["four", "five"]) {
+    await ann.getByLabel("Your hint").fill(hint);
+    await ann.getByRole("button", { name: "Send hint" }).click();
+    await expect(hints.filter({ hasText: hint })).toHaveCount(0);
+    await ann.getByRole("button", { name: "Send for −50" }).click();
+    await expect(hints.filter({ hasText: hint })).toContainText("−50");
+  }
+  // Two extra hints at −50 each, on top of the time, leave nothing, so the turn ends.
   await expect(cy.getByRole("heading", { name: "Out of points" })).toBeVisible();
 });
 

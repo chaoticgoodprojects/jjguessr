@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { joinAs, newPlayer } from "./helpers";
+import { dismissRules, joinAs, newPlayer } from "./helpers";
 
 test("the host picks a song pack and everyone sees it", async ({ browser }) => {
   const host = await newPlayer(browser);
@@ -24,6 +24,7 @@ test("a link that isn't a Spotify playlist gets a clear message", async ({ brows
   await host.goto("/");
   await host.getByRole("button", { name: "Create a game" }).click();
   await expect(host).toHaveURL(/\/r\/[A-Z]{4}$/);
+  await dismissRules(host);
   await host.getByLabel("Or paste a public Spotify playlist link").fill("https://example.com/not-a-playlist");
   await host.getByRole("button", { name: "Use playlist" }).click();
   await expect(host.getByRole("alert")).toContainText("doesn't look like a Spotify playlist link");

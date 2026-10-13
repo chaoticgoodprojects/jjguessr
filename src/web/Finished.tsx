@@ -1,5 +1,6 @@
 import type { RoomView } from "../shared/protocol";
-import { Scores, TEAM_NAME } from "./Turn";
+import { TEAM_NAME } from "./common";
+import { Scores } from "./Turn";
 
 export function Finished({ view }: { view: RoomView }) {
   const { green, black } = view.scores;
